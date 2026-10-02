@@ -1,0 +1,30 @@
+{
+  "name": "QRStream",
+  "short_name": "QRStream",
+  "lang": "zh",
+  "description": "离线二维码流传输（喷泉码 + RGB 三通道），发送/接收二合一",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "接收",
+      "url": "./?tab=recv"
+    },
+    {
+      "name": "发送",
+      "url": "./?tab=send"
+    }
+  ]
+}
