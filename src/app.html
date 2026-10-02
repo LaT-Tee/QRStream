@@ -111,7 +111,17 @@ details[open] summary::before{transform:rotate(45deg)}
 
 /* ---------- 接收 ---------- */
 .cam{padding:0;overflow:hidden}
-#wrap{position:relative;aspect-ratio:1/1;max-height:min(70dvh,640px);margin:0 auto;background:#000;overflow:hidden}
+#wrap{position:relative;aspect-ratio:1/1;width:min(100%,70dvh,640px);margin:0 auto;background:#000;overflow:hidden}
+/* 手机：取景框让出空间，进度卡片的状态和进度条尽量和摄像头同屏 */
+@media (max-width:899px){ #wrap{width:min(100%,max(240px,calc(100dvh - var(--appbar) - var(--tabbar) - var(--sat) - var(--sab) - 330px)))} }
+/* 取景框内的进度条（手机上进度卡片在下方，这里保证扫码时一眼就能看到） */
+#hud{position:absolute;left:0;right:0;bottom:0;padding:22px 12px 10px;pointer-events:none;
+  background:linear-gradient(transparent,rgba(0,0,0,.72));color:#fff;font-size:13px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+#hud>div:first-child{display:flex;gap:8px;align-items:baseline;font-variant-numeric:tabular-nums}
+#hudPct{font-size:20px;font-weight:800}
+#hudBar{height:6px;border-radius:999px;background:rgba(255,255,255,.25);overflow:hidden;margin-top:6px}
+#hudBar>div{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .2s}
+@media (min-width:900px){ #hud{display:none} }
 video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 #roi{position:absolute;inset:7%;pointer-events:none;display:none}
 #roi::before,#roi::after,#roi>i::before,#roi>i::after{content:"";position:absolute;width:34px;height:34px;border:3px solid var(--ok);filter:drop-shadow(0 0 6px rgba(52,211,153,.6))}
@@ -194,6 +204,7 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:
       <div id="wrap">
         <video id="video" playsinline muted></video>
         <div id="roi"><i></i></div>
+        <div id="hud" hidden><div><span id="hudPct"></span><span id="hudTxt"></span></div><div id="hudBar"><div></div></div></div>
         <div id="camIdle">
           <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
           <div style="font-weight:700;font-size:17px">点击开始扫描</div>
@@ -397,17 +408,27 @@ function getWorkers() {
 }
 
 // 进度格子
+// 冗余帧覆盖约一半源块，增量消元时很少能单独解出某一块，大多在收齐（rank=K）那一刻一起解出，所以蓝格主要在完成时出现
 const GCOLS = 50, C_IDLE = '#2a3040', C_SRC = '#34d399', C_REC = '#60a5fa';
+let cells = null;   // 每格：0 未确定 / 1 源帧收到 / 2 冗余帧补出
 function drawCell(i, color) { const c = $('gcv').getContext('2d'); c.fillStyle = color; c.fillRect((i % GCOLS) * 4, Math.floor(i / GCOLS) * 4, 3, 3); }
-function initGrid(K, color = C_IDLE) {
+function setCell(i, how) { if (!cells || cells[i]) return; cells[i] = how; drawCell(i, how === 1 ? C_SRC : C_REC); }
+function initGrid(K) {
   const g = $('gcv'); g.width = GCOLS * 4; g.height = Math.ceil(K / GCOLS) * 4;
   g.style.width = '100%'; g.style.height = 'auto'; g.style.maxHeight = '160px'; g.style.objectFit = 'contain'; g.style.objectPosition = 'left top';
-  for (let i = 0; i < K; i++) drawCell(i, color);
+  cells = new Uint8Array(K);
+  for (let i = 0; i < K; i++) drawCell(i, C_IDLE);
+}
+function setHud(pct, txt) {
+  $('hud').hidden = pct == null;
+  if (pct == null) return;
+  $('hudPct').textContent = pct.toFixed(0) + '%'; $('hudTxt').textContent = txt;
+  $('hudBar').firstElementChild.style.width = pct + '%';
 }
 function setResultVisible(v) { $('resultCard').hidden = !v; }
 
 function resetSession() {
-  S = null; ui = null; lastRaw = ''; $('missing').textContent = ''; $('result').innerHTML = ''; setResultVisible(false);
+  S = null; ui = null; cells = null; lastRaw = ''; $('missing').textContent = ''; $('result').innerHTML = ''; setResultVisible(false); setHud(null);
   const g = $('gcv'); g.width = 1; g.height = 1;
   $('pbar').firstElementChild.style.width = '0';
   getWorkers(); decW.postMessage({ cmd: 'reset' });
@@ -421,10 +442,12 @@ function scheduleUI() {
     uiPending = false; if (!S || S.done || !ui) return;
     const pct = ui.rank / S.K * 100;
     $('pbar').firstElementChild.style.width = pct + '%';
-    const need = S.K - ui.rank;
+    const need = S.K - ui.rank, pending = ui.rank - ui.known;
     setStatus(`会话 ${S.sid}：${ui.rank} / ${S.K}（${pct.toFixed(0)}%）　还差约 ${need + 2} 帧（任意帧都行）`);
+    setHud(pct, `${ui.rank} / ${S.K} · 还差约 ${need + 2} 帧`);
+    const hint = pending ? `（其中 ${pending} 块已被冗余帧抵上，收齐后一起解出、显示为蓝色）` : '';
     $('missing').innerHTML = ui.missing
-      ? `还差 ${need} 块：<code>${ui.missing}</code>　发送端继续播放即可；想更快可填进发送端「只播帧」` : '';
+      ? `灰格 ${S.K - ui.known} 块${hint}：<code>${ui.missing}</code>　发送端继续播放即可；想更快可填进发送端「只播帧」` : '';
   });
 }
 
@@ -433,28 +456,29 @@ function onDec(e) {
   switch (m.type) {
     case 'session':
       S = { sid: m.sid, K: m.K, len: m.len, done: false, t0: performance.now() };
-      $('result').innerHTML = ''; setResultVisible(false); initGrid(m.K);
+      $('result').innerHTML = ''; setResultVisible(false); initGrid(m.K); setHud(0, `0 / ${m.K}`);
       log(`检测到会话 ${m.sid}：${m.K} 个源块 × ${m.C} 字节${m.v === 3 ? '（v3 旧协议）' : ''}`);
       setStatus(`会话 ${m.sid}：0 / ${m.K}`);
       break;
     case 'progress':
       ui = m;
-      for (const [c, how] of m.newly) drawCell(c, how === 's' ? C_SRC : C_REC);
+      for (const [c, how] of m.newly) setCell(c, how === 's' ? 1 : 2);
       scheduleUI();
       break;
     case 'solving':
-      setStatus(`已收齐，正在还原… ${(m.pct * 100).toFixed(0)}%`);
+      setStatus(`已收齐，正在还原… ${(m.pct * 100).toFixed(0)}%`); setHud(100, `已收齐，还原中 ${(m.pct * 100).toFixed(0)}%`);
       $('pbar').firstElementChild.style.width = '100%';
       break;
     case 'done':
       if (S) S.done = true;
       stopScan();
-      initGrid(m.K, C_SRC); $('missing').textContent = '';
+      if (cells) for (let i = 0; i < m.K; i++) setCell(i, 2);   // 剩下的块都是收齐后由冗余帧消元解出的
+      $('missing').textContent = ''; setHud(100, '✅ 完成');
       setStatus(`✅ 完成：${m.meta.t === 'text' ? '文本' : m.meta.name}（${fmtB(m.meta.len)}，用时 ${m.secs.toFixed(1)} 秒，收 ${m.received} 帧 / 需 ${m.K}）`);
       if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
       showResult(m.meta, new Uint8Array(m.data));
       break;
-    case 'fail': if (S) S.done = true; stopScan(); setStatus('❌ ' + m.msg); break;
+    case 'fail': if (S) S.done = true; stopScan(); setStatus('❌ ' + m.msg); setHud(null); break;
     case 'log': log(m.msg); break;
     case 'foreign': log('非本协议二维码：' + m.text); break;
     case 'reset': log('已清空（含本机保存的续传进度）'); break;

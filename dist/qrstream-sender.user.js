@@ -2434,10 +2434,21 @@ var qrcode = function() {
       this.seen.add(seq); this.received++;
       const { W, K, piv, knownMask } = this;
       if (this.done || (seq < K && this.isKnown(seq))) return 'useless';
+      const data = new Uint32Array(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.length));
+      // 源帧对应的列上已有「非单位」主元（之前的冗余帧占了这一列）：让源帧当这一列的单位主元（该块立即确定），
+      // 原主元行消掉这一列后重新约简——行空间不变，秩只在原行找到新主元时 +1
+      if (seq < K && piv[seq]) {
+        const old = piv[seq], CW = data.length;
+        piv[seq] = { bits: null, data };
+        this.known++; knownMask[seq >>> 5] |= 1 << (seq & 31); this.newly.push([seq, 's']);
+        old.bits[seq >>> 5] &= ~(1 << (seq & 31));
+        for (let j = 0; j < CW; j++) old.data[j] ^= data[j];
+        this._reduce(old.bits, old.data, -1);
+        return 'useful';
+      }
       let bits;
       if (seq < K) { bits = new Uint32Array(W); bits[seq >>> 5] = 1 << (seq & 31); }
       else bits = rowBits(this.sid, seq, K);
-      const data = new Uint32Array(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.length));
       const CW = data.length;
       // 1) 剥离已知块
       for (let w = 0; w < W; w++) {
@@ -2451,6 +2462,12 @@ var qrcode = function() {
         }
       }
       // 2) 行阶梯约简
+      return this._reduce(bits, data, seq) ? 'useful' : 'useless';
+    }
+
+    /** 把一行约简进行阶梯形；找到新主元返回 true（rank+1），约成 0 返回 false。seq 仅用于标记单位行来源 */
+    _reduce(bits, data, seq) {
+      const { W, piv, knownMask } = this, CW = data.length;
       for (let w = 0; w < W; w++) {
         let x;
         while ((x = bits[w]) !== 0) {
@@ -2461,7 +2478,7 @@ var qrcode = function() {
             piv[col] = { bits: unit ? null : bits, data };
             this.rank++;
             if (unit) { this.known++; knownMask[w] |= 1 << b; this.newly.push([col, seq === col ? 's' : 'r']); }
-            return 'useful';
+            return true;
           }
           if (p.bits) for (let j = w; j < W; j++) bits[j] ^= p.bits[j];
           else bits[w] = x & (x - 1);
@@ -2469,7 +2486,7 @@ var qrcode = function() {
           for (let j = 0; j < CW; j++) data[j] ^= pd[j];
         }
       }
-      return 'useless';
+      return false;
     }
 
     /** rank===K 后回代：从高列到低列。onProgress(已完成比例) 约每 2% 调一次 */

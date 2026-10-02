@@ -42,6 +42,29 @@ run('丢 10%，K=1', 300, 500, { loss: 0.1 });
 run('错过系统帧(全冗余)', 200000, 500, { loss: 0.1, startAt: 400 });
 run('丢 10%，K=2000', 1000000, 500, { loss: 0.1 });
 run('错过系统帧，K=2000', 1000000, 500, { loss: 0.1, startAt: 2000 });
+
+// 先收到冗余帧、后补源帧（中途加入后循环回到开头 / 用「只播帧」补发）：每个收到的源帧都要立刻把对应块标成已知
+function lateSources(K, C, nRed) {
+  const data = new Uint8Array(K * C - 7); for (let i = 0; i < data.length; i++) data[i] = (i * 2246822519 >>> 11) & 255;
+  const s = makeSender(data, C), dec = new FountainDecoder(s.sid, s.K, C);
+  const how = new Array(s.K).fill(0), take = () => { for (const [c, h] of dec.newly) { if (how[c]) throw new Error('块重复确定 ' + c); how[c] = h; } };
+  for (let seq = s.K; seq < s.K + nRed; seq++) { dec.add(seq, s.payload(seq)); take(); }
+  const order = [...Array(s.K).keys()].sort(() => Math.random() - 0.5);
+  for (const seq of order) {
+    if (dec.done) break;
+    const r = dec.add(seq, s.payload(seq)); take();
+    if (r !== 'useful' || how[seq] !== 's') throw new Error(`源帧 ${seq} 没有立即确定（${r}）`);
+  }
+  if (!dec.done) throw new Error('lateSources 没收敛');
+  dec.solve();
+  const ok = hex(crc32n(dec.packet(data.length)), 8) === s.crc;
+  console.log(`${('先冗余 ' + nRed + ' 帧再补源帧').padEnd(28)} K=${String(s.K).padStart(5)}  源帧确定=${how.filter(h => h === 's').length}  ${ok ? 'CRC OK' : 'CRC FAIL'}`);
+  if (!ok) process.exit(1);
+}
+lateSources(64, 100, 20);
+lateSources(300, 100, 150);
+lateSources(70, 100, 69);
+
 if (process.argv.includes('--big')) {
   run('丢 10%，K=10000', 5000000, 500, { loss: 0.1 });
   run('错过系统帧，K=6000', 3000000, 500, { loss: 0.1, startAt: 6000 });
