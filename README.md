@@ -15,6 +15,8 @@
 
 *Air-gapped file transfer over animated QR codes — fountain-coded, offline-first PWA (iOS / Android / desktop) plus a userscript sender.*
 
+**[👉 在线使用：qrtransmit.pages.dev](https://qrtransmit.pages.dev/)**
+
 </div>
 
 ---
@@ -106,7 +108,7 @@ QX4:7BAJ:14:6801:9A3F0C21:23:5E7D11B0:<Base45 载荷>*
 
 - **电脑，最省事**：直接双击仓库里的 `dist/web/index.html`，无需部署、无需联网。所有代码与 WebAssembly 都已内联在这一个文件里，右上角会显示 **本地文件**。
   > 本地文件方式不会注册 Service Worker，也不能「安装」；用来**发送**完全没问题。接收需要摄像头，取决于浏览器是否允许本地页面使用摄像头（Chrome / Edge 会弹窗询问），不行时请改用部署地址或 `npm run serve`。
-- 访问你部署好的地址（见[部署](#部署)），或本地运行 `npm run serve` 后打开 `http://localhost:8080`。
+- **在线版**：直接打开 **<https://qrtransmit.pages.dev/>**（手机推荐这个）。也可以访问你自己部署的地址（见[部署](#部署)），或本地运行 `npm run serve` 后打开 `http://localhost:8080`。
 - **安装到主屏幕**（推荐，离线可用）：
   - **iPhone / iPad**：Safari 打开 → 分享 → **添加到主屏幕** → 从主屏幕图标打开一次，等右上角出现 **可离线**。
   - **Android**：Chrome 打开 → 菜单 → **安装应用**。
