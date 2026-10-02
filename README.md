@@ -8,7 +8,6 @@
 
 纯浏览器 · 完全离线 · 喷泉码抗丢帧 · 可选 RGB 三通道 · 收发二合一 PWA + 油猴发送端
 
-[![CI](https://github.com/<your-name>/qrstream/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-name>/qrstream/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![PWA](https://img.shields.io/badge/PWA-offline-blue)
 ![No server](https://img.shields.io/badge/server-none-lightgrey)
@@ -127,8 +126,8 @@ QX4:7BAJ:14:6801:9A3F0C21:23:5E7D11B0:<Base45 载荷>*
 **要求**：Node.js ≥ 18（无需 Python 或其它工具链）。
 
 ```bash
-git clone https://github.com/<your-name>/qrstream.git
-cd qrstream
+git clone https://github.com/LaT-Tee/QRStream.git
+cd QRStream
 npm ci
 npm run build
 ```
