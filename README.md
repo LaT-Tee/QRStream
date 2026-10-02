@@ -8,6 +8,7 @@
 
 纯浏览器 · 完全离线 · 喷泉码抗丢帧 · 可选 RGB 三通道 · 收发二合一 PWA + 油猴发送端
 
+[![CI](https://github.com/LaT-Tee/QRStream/actions/workflows/ci.yml/badge.svg)](https://github.com/LaT-Tee/QRStream/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![PWA](https://img.shields.io/badge/PWA-offline-blue)
 ![No server](https://img.shields.io/badge/server-none-lightgrey)
@@ -181,7 +182,7 @@ npx wrangler pages deploy dist/web --project-name=<你的项目名>
 | Secret | `CLOUDFLARE_ACCOUNT_ID` | 账户 ID |
 | Variable | `CF_PAGES_PROJECT` | Pages 项目名 |
 
-之后每次推送到 `main` 都会自动 构建 → 单元测试 → 部署。
+之后每次推送到 `main` 都会自动 构建 → 单元测试 → 部署。未配置 `CF_PAGES_PROJECT` 时该 workflow 会自动跳过，不会报错。
 
 ### D. GitHub Pages
 
