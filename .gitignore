@@ -22,3 +22,6 @@ Thumbs.db
 # 本地环境变量
 .env
 .env.*
+
+# 仿真输出
+test/sim/out/

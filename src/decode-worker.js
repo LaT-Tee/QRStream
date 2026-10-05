@@ -100,6 +100,13 @@ async function onText(txt) {
   if (txt === lastText) return; lastText = txt;
   const f = parseFrame(txt);
   if (!f) { post({ type: 'foreign', text: txt.slice(0, 80) }); return; }
+  await onFrame(f);
+}
+/** 彩格码的块：识别线程已校验过 CRC，字段与 parseFrame 的结果相同 */
+function onFrames(frames) {
+  for (const f of frames) chain = chain.then(() => onFrame(f)).catch(e => post({ type: 'log', msg: '解码异常：' + e.message }));
+}
+async function onFrame(f) {
   if (doneSids.has(f.sid + f.crc)) return;
   if (!S || S.sid !== f.sid || S.K !== f.K || S.crc !== f.crc || S.C !== f.C) await startSession(f);
   if (S.done) return;
@@ -136,6 +143,7 @@ async function finish() {
 self.onmessage = async e => {
   const m = e.data;
   if (m.texts) onTexts(m.texts);
+  if (m.frames) onFrames(m.frames);
   else if (m.cmd === 'reset') {
     chain = chain.then(async () => { S = null; lastText = ''; pend = []; doneSids.clear(); await idbClearAll(); post({ type: 'reset' }); });
   }

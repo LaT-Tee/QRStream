@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         QRStream Sender
 // @namespace    qrstream.sender
-// @version      1.0.0
+// @version      1.1.0
 // @license      MIT
 // @description  Alt+Q 打开面板。喷泉码 + 32 位帧校验 + 固定 QR 版本 + 可选 RGB 三通道（×3）。依赖全部内联，离线可用
 // @match        *://*/*
@@ -2576,18 +2576,20 @@ var qrcode = function() {
   /* ---------- 会话：分块、喷泉码、QR 生成 ---------- */
   const MAX_SEQ_DIGITS = 7;   // 用 9999999 估算 QR 版本：整场播放 QR 尺寸固定，RGB 三层也必定对齐
   class SenderSession {
-    constructor(meta, data, { chunk = 500, ecc = 'L' } = {}) {
+    /** qr=false：只给彩格码用，不生成 QR（每帧字节由彩格码版面决定） */
+    constructor(meta, data, { chunk = 500, ecc = 'L', qr = true } = {}) {
       const mb = new TextEncoder().encode(JSON.stringify(meta));
       const len = 4 + mb.length + data.length;
-      const C = Math.max(52, (chunk | 0) & ~3);                  // 4 的倍数，冗余帧按 32 位字 XOR
+      const C = Math.max(qr ? 52 : 16, (chunk | 0) & ~3);       // 4 的倍数，冗余帧按 32 位字 XOR
       const K = Math.ceil(len / C);
-      if (K > 20000) throw new Error(`数据太大：K=${K} 超过 20000，请压缩或调大每帧字节`);
+      if (K > 20000) throw new Error(`数据太大：K=${K} 超过 20000（每块 ${C} 字节，上限约 ${(20000 * C / 1048576).toFixed(1)} MB），请压缩，或${qr ? '调大每帧字节' : '换更快的档位 / 更小的格子，或改用二维码'}`);
       const padded = new Uint8Array(K * C);
       new DataView(padded.buffer).setUint32(0, mb.length); padded.set(mb, 4); padded.set(data, 4 + mb.length);
       Object.assign(this, { meta, len, C, K, ecc, padded,
         crc: hex(crc32n(padded.subarray(0, len)), 8),
         sid: Array.from(crypto.getRandomValues(new Uint8Array(4)), b => '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b % 36]).join(''),
         blocks32: Array.from({ length: K }, (_, i) => new Uint32Array(padded.buffer, i * C, C >>> 2)) });
+      if (!qr) { this.type = 0; return; }
       // 固定 QR 版本
       const probe = qrcodeLib(0, ecc);
       probe.addData(this.frameText(0, '9'.repeat(MAX_SEQ_DIGITS)), 'Alphanumeric');
@@ -2646,46 +2648,52 @@ var qrcode = function() {
 
   /* ---------- 播放器 ---------- */
   class Player {
-    /** canvas：显示用；opts.onShow(label)；opts.size() → 目标像素；opts.interval() → ms */
+    /** canvas：显示用；opts.onShow(label)；opts.box() → {w,h} 可用 CSS 像素（或 opts.size() → 正方形边长）；opts.interval() → ms；
+     *  opts.dpr() → 设备像素比（给了就按物理像素整数倍画，125%/150% 缩放的屏幕上每格也一样大） */
     constructor(canvas, opts) {
       this.cv = canvas; this.opts = opts;
       this.small = document.createElement('canvas'); this.sctx = this.small.getContext('2d');
-      this.s = null; this.rgb = false; this.only = null; this.pos = 0;
-      this.cache = new Map(); this.playing = false; this.raf = 0; this.last = 0; this.img = null;
+      this.s = null; this.rgb = false; this.grid = null; this.only = null; this.pos = 0;
+      this.imgs = new Map(); this.playing = false; this.raf = 0; this.ticks = 0; this.prevT = 0; this.period = 0;
       this._loop = this._loop.bind(this);
     }
-    load(session, rgb) { this.stop(); this.s = session; this.rgb = !!rgb; this.only = null; this.pos = 0; this.cache.clear(); this.render(); }
-    setRGB(rgb) { this.rgb = !!rgb; this.cache.clear(); this.render(); }
-    setOnly(list) { this.only = list && list.length ? list : null; this.pos = 0; this.cache.clear(); this.render(); }
-    get per() { return this.rgb ? 3 : 1; }
+    /** grid：彩格码 GridFramer（不传则播 QR） */
+    load(session, rgb, grid) { this.stop(); this.s = session; this.rgb = !!rgb; this.grid = grid || null; this.only = null; this.pos = 0; this.imgs.clear(); this.render(); }
+    setRGB(rgb) { this.rgb = !!rgb; this.imgs.clear(); this.render(); }
+    setOnly(list) { this.only = list && list.length ? list : null; this.pos = 0; this.imgs.clear(); this.render(); }
+    get per() { return this.grid ? this.grid.per : this.rgb ? 3 : 1; }
     seqAt(i) { const o = this.only; return o ? o[((i % o.length) + o.length) % o.length] : i; }
     seqsAt(p) { const a = []; for (let k = 0; k < this.per; k++) a.push(this.seqAt(p * this.per + k)); return a; }
-    frame(seq) { let f = this.cache.get(seq); if (!f) { f = this.s.build(seq); this.cache.set(seq, f); } return f; }
-    prefetch() {
-      const want = new Set([...this.seqsAt(this.pos), ...this.seqsAt(this.pos + 1)]);
-      for (const k of this.cache.keys()) if (!want.has(k)) this.cache.delete(k);
-      const nx = this.seqsAt(this.pos + 1), p0 = this.pos;
-      setTimeout(() => { if (this.s && this.pos === p0) for (const q of nx) if (!this.cache.has(q)) this.cache.set(q, this.s.build(q)); }, 0);
+    /** 第 p 张图 → {w, h, data: RGBA}（1 像素 = 1 模块/格） */
+    image(p) {
+      const seqs = this.seqsAt(p);
+      if (this.grid) return this.grid.paint(seqs);
+      const { N, data } = paint(seqs.map(q => this.s.build(q)));
+      return { w: N, h: N, data };
     }
     render() {
       if (!this.s) return;
-      const seqs = this.seqsAt(this.pos);
-      const { N, data } = paint(seqs.map(q => this.frame(q)), this.img && this.img.data);
-      if (this.small.width !== N) { this.small.width = this.small.height = N; this.img = null; }
-      if (!this.img || this.img.data !== data) this.img = new ImageData(data, N, N);
-      this.sctx.putImageData(this.img, 0, 0);
-      const want = this.opts.size ? this.opts.size() : 520;
-      const cell = Math.max(1, Math.floor(want / N)), size = cell * N;     // 整数倍放大，边缘锐利
-      if (this.cv.width !== size) { this.cv.width = size; this.cv.height = size; }
+      const p0 = this.pos, img = this.imgs.get(p0) || this.image(p0);
+      this.imgs.clear(); this.imgs.set(p0, img);
+      if (this.small.width !== img.w || this.small.height !== img.h) { this.small.width = img.w; this.small.height = img.h; }
+      this.sctx.putImageData(new ImageData(img.data, img.w, img.h), 0, 0);
+      const box = this.opts.box ? this.opts.box() : (n => ({ w: n, h: n }))(this.opts.size ? this.opts.size() : 520);
+      const dpr = (this.opts.dpr && this.opts.dpr()) || 1;
+      const cell = Math.max(1, Math.floor(Math.min(box.w * dpr / img.w, box.h * dpr / img.h)));      // 物理像素整数倍放大，边缘锐利
+      const W = cell * img.w, H = cell * img.h;
+      if (this.cv.width !== W || this.cv.height !== H) { this.cv.width = W; this.cv.height = H; }
+      if (this.opts.dpr) this.cv.style.width = W / dpr + 'px';
       const ctx = this.cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(this.small, 0, 0, size, size);
-      const K = this.s.K, lab = q => q < K ? `源${q + 1}` : `冗${q - K + 1}`;
+      ctx.drawImage(this.small, 0, 0, W, H);
+      const seqs = this.seqsAt(p0), K = this.s.K, lab = q => q < K ? `源${q + 1}` : `冗${q - K + 1}`;
       let label;
-      if (this.only) label = `补发 ${seqs.join(',')}（${(this.pos * this.per) % this.only.length + 1}/${this.only.length}）`;
+      if (this.only) label = `补发 ${this.grid ? seqs.length + ' 块' : seqs.join(',')}（${(p0 * this.per) % this.only.length + 1}/${this.only.length}）`;
+      else if (this.grid) label = `彩格码 第 ${p0 + 1} 张 · 每张 ${this.per} 块（源 ${K} 块${p0 * this.per >= K ? '，已进入冗余' : ''}）`;
       else if (this.per === 1) label = seqs[0] < K ? `源帧 ${seqs[0] + 1} / ${K}` : `冗余帧 #${seqs[0] - K + 1}`;
       else label = `RGB：${seqs.map(lab).join(' · ')}　（源 ${K} 块）`;
       if (this.opts.onShow) this.opts.onShow(label, seqs);
-      this.prefetch();
+      // 下一张提前生成，播放时不卡
+      setTimeout(() => { if (this.s && this.pos === p0 && !this.imgs.has(p0 + 1)) this.imgs.set(p0 + 1, this.image(p0 + 1)); }, 0);
     }
     step(d) {
       if (!this.s) return;
@@ -2693,13 +2701,19 @@ var qrcode = function() {
       this.render();
     }
     restart() { this.pos = 0; this.render(); }
+    /* 换帧按屏幕刷新次数计：每张显示 round(间隔 / 刷新周期) 次刷新，不随毫秒累计漂移（漂移会让个别帧变短，引起混帧） */
     _loop(now) {
       if (!this.playing) return;
-      const ms = this.opts.interval ? this.opts.interval() : 100;
-      if (now - this.last >= ms - 4) { this.last = now - this.last < ms * 2 ? this.last + ms : now; this.step(1); }
+      if (this.prevT) {
+        const d = now - this.prevT;
+        if (d > 3 && d < (this.period ? this.period * 1.5 : 40)) this.period = this.period ? this.period * 0.9 + d * 0.1 : d;
+      }
+      this.prevT = now;
+      const ms = this.opts.interval ? this.opts.interval() : 100, n = Math.max(1, Math.round(ms / (this.period || 16.67)));
+      if (++this.ticks >= n) { this.ticks = 0; this.step(1); }
       this.raf = requestAnimationFrame(this._loop);
     }
-    play() { if (!this.s) return; this.stop(); this.playing = true; this.last = performance.now(); this.raf = requestAnimationFrame(this._loop); }
+    play() { if (!this.s) return; this.stop(); this.playing = true; this.ticks = 0; this.prevT = 0; this.raf = requestAnimationFrame(this._loop); }
     stop() { this.playing = false; cancelAnimationFrame(this.raf); }
   }
 
@@ -2761,7 +2775,7 @@ var qrcode = function() {
         <div class="row">
           <label>每帧字节 <input type="number" id="qrx-chunk" value="500" min="52" max="1900" step="4"></label>
           <label>纠错 <select id="qrx-ecc"><option selected>L</option><option>M</option><option>Q</option><option>H</option></select></label>
-          <label>间隔ms <input type="number" id="qrx-ms" value="50" min="34" step="2" title="接收端摄像头约 30 帧/秒（33ms），低于 34 没有意义"></label>
+          <label>间隔ms <input type="number" id="qrx-ms" value="66" min="34" step="2" title="对齐屏幕刷新；摄像头 30 帧/秒时 66ms 每张都能被完整拍到一次，太短会两帧混在一张照片里"></label>
           <label>尺寸px <input type="number" id="qrx-px" value="520" min="200" step="40"></label>
         </div>
         <div class="row">
@@ -2785,7 +2799,7 @@ var qrcode = function() {
 
     player = new QXS.Player($('qrx-cv'), {
       size: () => root.classList.contains('qrx-full') ? Math.min(innerWidth - 20, innerHeight - 80) : (+$('qrx-px').value || 520),
-      interval: () => +$('qrx-ms').value || 50,
+      interval: () => +$('qrx-ms').value || 66,
       onShow: label => { $('qrx-idx').textContent = label; },
     });
     const sync = () => { $('qrx-pause').textContent = player.playing ? '⏸ 暂停' : '▶ 播放'; };
@@ -2815,7 +2829,7 @@ var qrcode = function() {
   function setFile(f) { sFile = f; $('qrx-file-name').textContent = f ? `📎 ${f.name}（${fmtB(f.size)}）` : ''; }
   function info(s) { $('qrx-info').textContent = s; }
   function showInfo() {
-    const ms = +$('qrx-ms').value || 50, per = $('qrx-rgb').checked ? 3 : 1, fps = 1000 / ms;
+    const ms = +$('qrx-ms').value || 66, per = $('qrx-rgb').checked ? 3 : 1, fps = 1000 / ms;
     info(`会话: ${sess.sid}　类型: ${sess.meta.t}${sess.meta.z ? '(已压缩)' : ''}　原始 ${fmtB(sess.meta.len)} → 包 ${fmtB(sess.len)}
 源块 K=${sess.K}　QR v${sess.type}（固定）　纠错 ${sess.ecc}　${fps.toFixed(1)} 码/秒${per === 3 ? `（RGB ×3 = ${(fps * 3).toFixed(1)} 帧/秒）` : ''}
 接收端收到任意约 ${sess.K + 2} 帧即可还原（理想约 ${((sess.K + 2) / per / fps).toFixed(1)} 秒），漏帧无需等下一轮`);
@@ -2838,7 +2852,7 @@ var qrcode = function() {
     info('处理中…'); await new Promise(r => setTimeout(r, 0));
     const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('qrx-text').value, compress: $('qrx-z').checked });
     const s = new QXS.SenderSession(meta, data, { chunk: +$('qrx-chunk').value || 500, ecc: $('qrx-ecc').value });
-    const ms = +$('qrx-ms').value || 50;
+    const ms = +$('qrx-ms').value || 66;
     if (s.K > 3000 && !confirm(`共 ${s.K} 帧，至少约 ${(s.K * ms / 60000 / ($('qrx-rgb').checked ? 3 : 1)).toFixed(1)} 分钟。建议先压缩图片/调低质量。继续？`)) { info('已取消'); return; }
     sess = s; $('qrx-chunk').value = s.C; $('qrx-only').value = '';
     player.load(sess, $('qrx-rgb').checked);

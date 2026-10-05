@@ -271,18 +271,43 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:
     <div class="card">
       <h2>参数</h2>
       <div class="fields">
-        <label class="field"><span>每帧字节</span><input type="number" id="sChunk" value="500" min="52" max="1900" step="4" inputmode="numeric"></label>
-        <label class="field"><span>间隔 ms（≥34）</span><input type="number" id="sMs" value="50" min="34" step="2" inputmode="numeric"></label>
+        <label class="field"><span>码型</span>
+          <select id="sKind">
+            <option value="grid" selected>彩格码 · 高速</option>
+            <option value="qr">二维码 · 兼容</option>
+          </select></label>
+        <label class="field"><span>间隔 ms（≥34）</span><input type="number" id="sMs" value="66" min="34" step="2" inputmode="numeric"></label>
       </div>
-      <label class="switch"><span class="t">RGB 三通道 <small>一张图同时传 3 帧，吞吐 ×3</small></span><input type="checkbox" class="sw" id="sRgb" checked></label>
+      <div id="gOpts" class="fields" style="margin-top:12px">
+        <label class="field"><span>档位</span>
+          <select id="gLv">
+            <option value="222:4">稳 · 8 色</option>
+            <option value="242:4" selected>标准 · 16 色</option>
+            <option value="444:2">快 · 64 色</option>
+            <option value="444:4">极速 · 64 色，光线好、手稳</option>
+          </select></label>
+        <label class="field"><span>格子</span>
+          <select id="gLong">
+            <option value="73">大 · 73 格，远/糊也能读</option>
+            <option value="85" selected>中 · 85 格 · 推荐</option>
+            <option value="97">小 · 97 格，需靠近</option>
+          </select></label>
+      </div>
+      <div id="qOpts">
+        <div class="fields" style="margin-top:12px">
+          <label class="field"><span>每帧字节</span><input type="number" id="sChunk" value="500" min="52" max="1900" step="4" inputmode="numeric"></label>
+        </div>
+        <label class="switch"><span class="t">RGB 三通道 <small>一张图同时传 3 帧，吞吐 ×3</small></span><input type="checkbox" class="sw" id="sRgb" checked></label>
+      </div>
       <div class="divider"></div>
       <label class="switch"><span class="t">压缩 <small>deflate 无损压缩，省 5% 以上才采用</small></span><input type="checkbox" class="sw" id="sZ" checked></label>
       <details>
         <summary>高级</summary>
         <div class="fields" style="padding:6px 0 4px">
-          <label class="field"><span>纠错等级</span><select id="sEcc"><option selected>L</option><option>M</option><option>Q</option><option>H</option></select></label>
-          <label class="field"><span>二维码尺寸 px（0=自动）</span><input type="number" id="sPx" value="0" min="0" step="40" inputmode="numeric"></label>
+          <label class="field qOnly"><span>纠错等级</span><select id="sEcc"><option selected>L</option><option>M</option><option>Q</option><option>H</option></select></label>
+          <label class="field qOnly"><span>二维码尺寸 px（0=自动）</span><input type="number" id="sPx" value="0" min="0" step="40" inputmode="numeric"></label>
         </div>
+        <div class="tiny">换帧间隔会对齐到屏幕刷新（60Hz 下 66ms = 4 次刷新）。摄像头 30 帧/秒时，66ms 每张都能被完整拍到一次；间隔太短会两帧混在一张照片里。</div>
       </details>
       <button class="btn primary block" id="sGen" style="margin-top:12px;min-height:48px">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>生成并播放</button>
@@ -324,6 +349,7 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:
 <script type="text/plain" id="src-dec">/*@DECODE_WORKER*/</script>
 <script>/*@QRCODE_LIB*/</script>
 <script>/*@CODEC*/</script>
+<script>/*@GRID_CODE*/</script>
 <script>/*@SENDER_CORE*/</script>
 <script>
 (() => {
@@ -431,7 +457,7 @@ function resetSession() {
   S = null; ui = null; cells = null; lastRaw = ''; $('missing').textContent = ''; $('result').innerHTML = ''; setResultVisible(false); setHud(null);
   const g = $('gcv'); g.width = 1; g.height = 1;
   $('pbar').firstElementChild.style.width = '0';
-  getWorkers(); decW.postMessage({ cmd: 'reset' });
+  getWorkers(); decW.postMessage({ cmd: 'reset' }); scanW.postMessage({ reset: true });
   setStatus(running ? '扫描中… 等待第一帧' : '未开始');
 }
 
@@ -457,7 +483,7 @@ function onDec(e) {
     case 'session':
       S = { sid: m.sid, K: m.K, len: m.len, done: false, t0: performance.now() };
       $('result').innerHTML = ''; setResultVisible(false); initGrid(m.K); setHud(0, `0 / ${m.K}`);
-      log(`检测到会话 ${m.sid}：${m.K} 个源块 × ${m.C} 字节${m.v === 3 ? '（v3 旧协议）' : ''}`);
+      log(`检测到会话 ${m.sid}：${m.K} 个源块 × ${m.C} 字节${m.v === 3 ? '（v3 旧协议）' : m.v === 5 ? '（彩格码）' : ''}`);
       setStatus(`会话 ${m.sid}：0 / ${m.K}`);
       break;
     case 'progress':
@@ -556,19 +582,18 @@ function nextVideoFrame() {
 }
 function onVideoFrame() { fresh = true; pump(); nextVideoFrame(); }
 
-// 只解码画面中央正方形（= 取景框里看到的区域），并缩到「解码尺寸」
+// 整幅画面送去识别：彩格码用整幅；二维码在识别线程里取中央正方形（= 取景框）并缩到「解码尺寸」
 function pump() {
   if (!running || busy || !fresh || !engine || document.hidden || video.readyState < 2) return;
   fresh = false;
-  const vw = video.videoWidth, vh = video.videoHeight, side = Math.min(vw, vh);
-  const out = Math.min(side, +$('scan').value || 640);
-  if (cv.width !== out) { cv.width = out; cv.height = out; }
-  ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, out, out);
-  const img = ctx.getImageData(0, 0, out, out);
+  const vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, 1920 / Math.max(vw, vh)), w = Math.round(vw * k), h = Math.round(vh * k);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  ctx.drawImage(video, 0, 0, w, h);
+  const img = ctx.getImageData(0, 0, w, h);
   busy = true; perf.n++;
-  scanW.postMessage({ buf: img.data.buffer, w: out, h: out, mode: $('rmode').value }, [img.data.buffer]);
+  scanW.postMessage({ buf: img.data.buffer, w, h, mode: $('rmode').value, out: +$('scan').value || 640 }, [img.data.buffer]);
 }
-const perf = { n: 0, ok: 0, ms: 0, rgb: 0, t: performance.now() };
+const perf = { n: 0, ok: 0, ms: 0, rgb: 0, gOk: 0, gOf: 0, t: performance.now() };
 function onScan(e) {
   const d = e.data;
   if (d.ready) {
@@ -582,11 +607,17 @@ function onScan(e) {
     const nt = d.texts.filter(t => t !== lastRaw);
     if (nt.length) { lastRaw = nt[nt.length - 1]; decW.postMessage({ texts: nt }); }
   }
+  if (d.grid) { perf.gOk += d.grid.ok; perf.gOf += d.grid.of; perf.gLv = d.grid.lv; if (d.frames.length) decW.postMessage({ frames: d.frames }); }
   const now = performance.now();
   if (now - perf.t > 1000) {
-    const s = (now - perf.t) / 1000;
-    $('perf').textContent = `${engine} · 解码 ${(perf.n / s).toFixed(1)} 次/秒 · 识别 ${(perf.ok / s).toFixed(1)} 码/秒${perf.rgb ? '（RGB）' : ''} · ${(perf.ms / Math.max(1, perf.n)).toFixed(1)} ms/次`;
-    perf.n = perf.ok = perf.ms = perf.rgb = 0; perf.t = now;
+    const s = (now - perf.t) / 1000, avgMs = (perf.ms / Math.max(1, perf.n)).toFixed(1);
+    const gr = perf.gOf ? perf.gOk / perf.gOf : 0;
+    const tip = !perf.gOf ? '' : gr < 0.6 ? '　· 块成功率低：靠近些/拿稳，或发送端换更稳的档位、更大的格子'
+      : gr > 0.97 && perf.gLv !== '444:4' ? '　· 很稳，发送端可以试更快的档位' : '';
+    $('perf').textContent = perf.gOf
+      ? `彩格码 · 解码 ${(perf.n / s).toFixed(1)} 次/秒 · 块 ${perf.gOk}/${perf.gOf}（${(gr * 100).toFixed(0)}%） · ${avgMs} ms/次${tip}`
+      : `${engine} · 解码 ${(perf.n / s).toFixed(1)} 次/秒 · 识别 ${(perf.ok / s).toFixed(1)} 码/秒${perf.rgb ? '（RGB）' : ''} · ${avgMs} ms/次`;
+    perf.n = perf.ok = perf.ms = perf.rgb = perf.gOk = perf.gOf = 0; perf.t = now;
   }
   pump();
 }
@@ -602,21 +633,29 @@ $('rmode').onchange = () => store.set('rmode', $('rmode').value);
 $('scan').value = store.get('scan', '640'); $('rmode').value = store.get('rmode', 'auto');
 
 /* ================= 发送端 ================= */
-const QXS = window.QXS;
-let sFile = null, sess = null;
+const GRID_TILE = 24;   // 彩格码分块边长（格），见 test/sim 仿真
+const QXS = window.QXS, QXG = window.QXG;
+let sFile = null, sess = null, sGrid = null;   // sGrid：彩格码 GridFramer（二维码模式为 null）
 const player = new QXS.Player($('sCv'), {
-  size: () => senderPx(),
-  interval: () => Math.max(34, +$('sMs').value || 50),
+  box: () => senderBox(),
+  dpr: () => window.devicePixelRatio || 1,
+  interval: () => Math.max(34, +$('sMs').value || 66),
   onShow: label => { $('sIdx').textContent = label; },
 });
-function senderPx() {
+/** 二维码/彩格码可用的显示区域（CSS 像素） */
+function senderBox() {
   const want = +$('sPx').value;
-  if (want > 0) return want;
+  if (want > 0 && !sGrid) return { w: want, h: want };
   const st = $('stage'), full = st.classList.contains('full');
   const cs = getComputedStyle(st), padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight), padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
   const w = st.clientWidth - padX;
   const h = full ? innerHeight - padY - 90 : innerHeight * 0.72;
-  return Math.max(160, Math.floor(Math.min(w, h)));
+  return { w: Math.max(160, Math.floor(w)), h: Math.max(160, Math.floor(h)) };
+}
+function syncKindUI() {
+  const grid = $('sKind').value === 'grid';
+  $('gOpts').hidden = !grid; $('qOpts').hidden = grid;
+  for (const el of document.querySelectorAll('.qOnly')) el.hidden = grid;
 }
 function fitSender() { if (sess && !$('send').hidden) player.render(); }
 function syncPlayBtn() { $('sPlay').textContent = player.playing ? '⏸ 暂停' : '▶ 播放'; }
@@ -638,23 +677,33 @@ for (const el of [$('drop'), $('sText')]) {
   el.addEventListener('dragleave', () => $('drop').classList.remove('over'));
   el.addEventListener('drop', e => { e.preventDefault(); $('drop').classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) setSFile(f); });
 }
-for (const id of ['sChunk', 'sMs', 'sEcc', 'sPx']) {
-  const el = $(id); el.value = store.get(id, el.value); el.addEventListener('change', () => store.set(id, el.value));
+// sMs 用新键：旧版默认 50ms 会混帧，升级后改用 66ms
+for (const [id, key] of [['sChunk'], ['sMs', 'sMs.v2'], ['sEcc'], ['sPx'], ['sKind'], ['gLv'], ['gLong']].map(([i, k]) => [i, k || i])) {
+  const el = $(id), v = store.get(key, el.value);
+  if ([...(el.options || [{ value: v }])].some(o => o.value === v)) el.value = v;
+  el.addEventListener('change', () => store.set(key, el.value));
 }
+$('sKind').addEventListener('change', syncKindUI); syncKindUI();
 for (const id of ['sRgb', 'sZ']) {
   const el = $(id); el.checked = store.get(id, el.checked ? '1' : '0') === '1'; el.addEventListener('change', () => store.set(id, el.checked ? '1' : '0'));
 }
-$('sRgb').addEventListener('change', () => { if (sess) { player.setRGB($('sRgb').checked); showSInfo(); } });
+$('sRgb').addEventListener('change', () => { if (sess && !sGrid) { player.setRGB($('sRgb').checked); showSInfo(); } });
 $('sMs').addEventListener('change', () => { if (+$('sMs').value < 34) $('sMs').value = 34; showSInfo(); });
 $('sPx').addEventListener('change', fitSender);
 
 function showSInfo() {
   if (!sess) return;
-  const ms = Math.max(34, +$('sMs').value || 50), per = $('sRgb').checked ? 3 : 1, fps = 1000 / ms;
-  const secs = (sess.K + 2) / per / fps;
-  $('sInfo').textContent =
-`会话 ${sess.sid} · ${sess.meta.t === 'text' ? '文本' : sess.meta.name}${sess.meta.z ? '（已压缩）' : ''} · ${fmtB(sess.meta.len)} → 包 ${fmtB(sess.len)}
-源块 K=${sess.K} · QR v${sess.type}（固定） · 纠错 ${sess.ecc} · ${fps.toFixed(1)} 码/秒${per === 3 ? ` × RGB 3 = ${(fps * 3).toFixed(1)} 帧/秒` : ''}
+  const ms = Math.max(34, +$('sMs').value || 66), per = sGrid ? sGrid.per : $('sRgb').checked ? 3 : 1, fps = 1000 / ms;
+  const secs = (sess.K + 2) / per / fps, rate = fmtB(fps * per * sess.C) + '/秒';
+  const head = `会话 ${sess.sid} · ${sess.meta.t === 'text' ? '文本' : sess.meta.name}${sess.meta.z ? '（已压缩）' : ''} · ${fmtB(sess.meta.len)} → 包 ${fmtB(sess.len)}`;
+  const L = sGrid && sGrid.L;
+  $('sInfo').textContent = L
+    ? `${head}
+彩格码 ${L.cols}×${L.rows} 格 · ${L.levels.reduce((a, b) => a * b, 1)} 色 · 码率 ${['1/3', '2/5', '1/2', '3/5', '2/3', '3/4', '4/5'][L.rateIdx]} · 每张 ${per} 块 × ${sess.C} 字节
+源块 K=${sess.K} · ${fps.toFixed(1)} 张/秒 · 满速约 ${rate}
+接收端收到任意约 ${sess.K + 2} 块即可还原（理想约 ${secs.toFixed(1)} 秒），漏块不用等下一轮`
+    : `${head}
+源块 K=${sess.K} · QR v${sess.type}（固定） · 纠错 ${sess.ecc} · ${fps.toFixed(1)} 码/秒${per === 3 ? ` × RGB 3 = ${(fps * 3).toFixed(1)} 帧/秒` : ''} · 满速约 ${rate}
 接收端收到任意约 ${sess.K + 2} 帧即可还原（理想约 ${secs.toFixed(1)} 秒），漏帧不用等下一轮`;
 }
 
@@ -663,13 +712,20 @@ $('sGen').onclick = async () => {
   $('sGen').disabled = true; $('sInfo').textContent = '处理中…';
   try {
     const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('sText').value, compress: $('sZ').checked });
-    const s = new QXS.SenderSession(meta, data, { chunk: +$('sChunk').value || 500, ecc: $('sEcc').value });
-    const ms = Math.max(34, +$('sMs').value || 50);
-    if (s.K > 3000 && !confirm(`共 ${s.K} 帧，至少约 ${(s.K * ms / 60000 / ($('sRgb').checked ? 3 : 1)).toFixed(1)} 分钟。继续？`)) { $('sInfo').textContent = '已取消'; return; }
-    sess = s; $('sChunk').value = s.C; $('sOnly').value = '';
+    let s, grid = null;
+    if ($('sKind').value === 'grid') {
+      const [lv, rate] = $('gLv').value.split(':');
+      const L = QXG.makeLayout(QXG.profile({ long: +$('gLong').value, levels: [...lv].map(Number), rate: +rate, tile: GRID_TILE }));
+      s = new QXS.SenderSession(meta, data, { chunk: L.C, qr: false });
+      grid = new QXG.GridFramer(s, L);
+    } else s = new QXS.SenderSession(meta, data, { chunk: +$('sChunk').value || 500, ecc: $('sEcc').value });
+    const ms = Math.max(34, +$('sMs').value || 66), per = grid ? grid.per : $('sRgb').checked ? 3 : 1;
+    const mins = (s.K + 2) / per * ms / 60000;
+    if (mins > 3 && !confirm(`共 ${s.K} 块，至少约 ${mins.toFixed(1)} 分钟。继续？`)) { $('sInfo').textContent = '已取消'; return; }
+    sess = s; sGrid = grid; if (!grid) $('sChunk').value = s.C; $('sOnly').value = '';
     $('stageEmpty').hidden = true; $('stageBox').hidden = false;
     for (const id of ['sPlay', 'sPrev', 'sNext', 'sRestart', 'sFull']) $(id).disabled = false;
-    player.load(sess, $('sRgb').checked);
+    player.load(sess, $('sRgb').checked, grid);
     showSInfo();
     player.play(); syncPlayBtn(); keepAwake(true);
     if (innerWidth < 900) $('stage').scrollIntoView({ behavior: 'smooth', block: 'center' });

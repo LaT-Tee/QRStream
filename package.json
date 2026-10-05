@@ -1,6 +1,6 @@
 {
   "name": "qrstream",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Air-gapped file transfer over animated QR codes: fountain code + optional RGB 3-channel, offline PWA receiver/sender and a userscript sender.",
   "license": "MIT",
   "private": true,
@@ -11,10 +11,11 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "npm run test:unit",
-    "test:unit": "node test/unit/decoder.js && node test/unit/overhead.js && node test/unit/rgb-capture.js",
-    "test:e2e": "npm run build && node test/e2e/transfer.js && node test/e2e/offline.js && node test/e2e/fallback.js && node test/e2e/userscript.js",
+    "test:unit": "node test/unit/decoder.js && node test/unit/overhead.js && node test/unit/rgb-capture.js && node test/unit/grid.js",
+    "test:e2e": "npm run build && node test/e2e/transfer.js && node test/e2e/grid.js && node test/e2e/offline.js && node test/e2e/fallback.js && node test/e2e/userscript.js",
     "bench": "node test/unit/decoder.js --big",
-    "serve": "node test/helpers/serve.js dist/web 8080"
+    "serve": "node test/helpers/serve.js dist/web 8080",
+    "sim": "node test/sim/study.js all && node test/sim/timing.js"
   },
   "dependencies": {},
   "devDependencies": {

@@ -71,7 +71,7 @@
         <div class="row">
           <label>每帧字节 <input type="number" id="qrx-chunk" value="500" min="52" max="1900" step="4"></label>
           <label>纠错 <select id="qrx-ecc"><option selected>L</option><option>M</option><option>Q</option><option>H</option></select></label>
-          <label>间隔ms <input type="number" id="qrx-ms" value="50" min="34" step="2" title="接收端摄像头约 30 帧/秒（33ms），低于 34 没有意义"></label>
+          <label>间隔ms <input type="number" id="qrx-ms" value="66" min="34" step="2" title="对齐屏幕刷新；摄像头 30 帧/秒时 66ms 每张都能被完整拍到一次，太短会两帧混在一张照片里"></label>
           <label>尺寸px <input type="number" id="qrx-px" value="520" min="200" step="40"></label>
         </div>
         <div class="row">
@@ -95,7 +95,7 @@
 
     player = new QXS.Player($('qrx-cv'), {
       size: () => root.classList.contains('qrx-full') ? Math.min(innerWidth - 20, innerHeight - 80) : (+$('qrx-px').value || 520),
-      interval: () => +$('qrx-ms').value || 50,
+      interval: () => +$('qrx-ms').value || 66,
       onShow: label => { $('qrx-idx').textContent = label; },
     });
     const sync = () => { $('qrx-pause').textContent = player.playing ? '⏸ 暂停' : '▶ 播放'; };
@@ -125,7 +125,7 @@
   function setFile(f) { sFile = f; $('qrx-file-name').textContent = f ? `📎 ${f.name}（${fmtB(f.size)}）` : ''; }
   function info(s) { $('qrx-info').textContent = s; }
   function showInfo() {
-    const ms = +$('qrx-ms').value || 50, per = $('qrx-rgb').checked ? 3 : 1, fps = 1000 / ms;
+    const ms = +$('qrx-ms').value || 66, per = $('qrx-rgb').checked ? 3 : 1, fps = 1000 / ms;
     info(`会话: ${sess.sid}　类型: ${sess.meta.t}${sess.meta.z ? '(已压缩)' : ''}　原始 ${fmtB(sess.meta.len)} → 包 ${fmtB(sess.len)}
 源块 K=${sess.K}　QR v${sess.type}（固定）　纠错 ${sess.ecc}　${fps.toFixed(1)} 码/秒${per === 3 ? `（RGB ×3 = ${(fps * 3).toFixed(1)} 帧/秒）` : ''}
 接收端收到任意约 ${sess.K + 2} 帧即可还原（理想约 ${((sess.K + 2) / per / fps).toFixed(1)} 秒），漏帧无需等下一轮`);
@@ -148,7 +148,7 @@
     info('处理中…'); await new Promise(r => setTimeout(r, 0));
     const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('qrx-text').value, compress: $('qrx-z').checked });
     const s = new QXS.SenderSession(meta, data, { chunk: +$('qrx-chunk').value || 500, ecc: $('qrx-ecc').value });
-    const ms = +$('qrx-ms').value || 50;
+    const ms = +$('qrx-ms').value || 66;
     if (s.K > 3000 && !confirm(`共 ${s.K} 帧，至少约 ${(s.K * ms / 60000 / ($('qrx-rgb').checked ? 3 : 1)).toFixed(1)} 分钟。建议先压缩图片/调低质量。继续？`)) { info('已取消'); return; }
     sess = s; $('qrx-chunk').value = s.C; $('qrx-only').value = '';
     player.load(sess, $('qrx-rgb').checked);

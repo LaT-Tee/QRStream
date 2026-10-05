@@ -56,7 +56,7 @@ const zxJs = fs.readFileSync(path.join(zxDir, 'dist/iife/reader/index.js'), 'utf
 const zxWasm = fs.readFileSync(path.join(zxDir, 'dist/reader/zxing_reader.wasm'));
 const jsqr = fs.readFileSync(mod('jsqr/dist/jsQR.js'));
 
-const codec = src('codec.js'), sender = src('sender-core.js'), scanCore = src('scan-core.js');
+const codec = src('codec.js'), sender = src('sender-core.js'), scanCore = src('scan-core.js'), grid = src('grid-code.js');
 const parts = {
   '/*@QRCODE_LIB*/': safe(qrlib, 'qrcode-generator'),
   '/*@CODEC*/': safe(codec, 'codec.js'),
@@ -69,7 +69,8 @@ const html = fill(src('app.html'), {
   '/*@ZXING_JS*/': safe(zxJs, 'zxing-wasm'),
   '/*@ZXING_WASM_B64*/': rawDeflateB64(zxWasm),
   '/*@JSQR_B64*/': rawDeflateB64(jsqr),
-  '/*@SCAN_WORKER*/': safe(scanCore + '\n' + src('scan-worker.js'), 'scan-worker'),
+  '/*@GRID_CODE*/': safe(grid, 'grid-code.js'),
+  '/*@SCAN_WORKER*/': safe(codec + '\n' + scanCore + '\n' + grid + '\n' + src('scan-worker.js'), 'scan-worker'),
   '/*@DECODE_WORKER*/': safe(codec + '\n' + src('decode-worker.js'), 'decode-worker'),
   '/*@VERSION*/': pkg.version,
 }, 'app.html');

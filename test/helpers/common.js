@@ -14,29 +14,35 @@ function randText(n) {
   let s = ''; for (let i = 0; i < n; i++) s += A[(Math.random() * A.length) | 0]; return s;
 }
 
-/** 在 PWA 发送页生成帧并逐帧截图 → [{label, png(dataURL)}] */
-async function captureSender(url, text, { rgb = false, chunk = 400, extra = 30 } = {}) {
+/** 在 PWA 发送页生成帧并逐帧截图 → [{label, png(dataURL)}]。kind='qr' | 'grid'（grid 时 preset=档位如 '242:4'、long=格子） */
+async function captureSender(url, text, { kind = 'qr', rgb = false, chunk = 400, extra = 30, preset = '242:4', long = 85 } = {}) {
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 900, height: 1000 } });
   await p.goto(url + '?tab=send');
   await p.fill('#sText', text);
-  await p.fill('#sChunk', String(chunk));
-  if (rgb) await p.check('#sRgb'); else await p.uncheck('#sRgb');
+  await p.selectOption('#sKind', kind);
   await p.evaluate(() => { document.querySelector('details').open = true; });
-  await p.fill('#sPx', '600');
+  if (kind === 'qr') {
+    await p.fill('#sChunk', String(chunk));
+    if (rgb) await p.check('#sRgb'); else await p.uncheck('#sRgb');
+    await p.fill('#sPx', '600');
+  } else {
+    await p.selectOption('#gLv', preset); await p.selectOption('#gLong', String(long));
+  }
   await p.click('#sGen');
   await p.waitForFunction(() => /会话/.test(document.querySelector('#sInfo').textContent));
   await p.click('#sPlay');       // 暂停自动播放，改成逐帧截图
   await p.click('#sRestart');
   const info = await p.textContent('#sInfo');
-  const K = +info.match(/K=(\d+)/)[1], ver = info.match(/QR v(\d+)/)[1];
-  const n = Math.ceil((K + extra) / (rgb ? 3 : 1)), frames = [];
+  const K = +info.match(/K=(\d+)/)[1], ver = kind === 'qr' ? info.match(/QR v(\d+)/)[1] : 'grid';
+  const per = kind === 'grid' ? +info.match(/每张 (\d+) 块/)[1] : rgb ? 3 : 1;
+  const n = Math.ceil((K + extra) / per), frames = [];
   for (let i = 0; i < n; i++) {
     frames.push({ label: await p.textContent('#sIdx'), png: await p.evaluate(() => document.querySelector('#sCv').toDataURL('image/png')) });
     await p.click('#sNext');
   }
   await b.close();
-  return { K, ver, frames };
+  return { K, ver, per, frames };
 }
 
 /** 帧序列 → 模拟摄像头的 y4m：按发送端节奏（默认 50ms = 20 码/秒）播放，被 30fps 摄像头采样；加缩放、灰背景、模糊、噪声、yuv420 色度抽样 */
