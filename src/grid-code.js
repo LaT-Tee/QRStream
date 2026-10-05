@@ -112,6 +112,89 @@
     for (let i = 0; i < n; i++) { const j = il[i]; dL[cb[i % M]] += sc[j] ? -llr[j] : llr[j]; }
     return viterbi(dL, nInfo);
   }
+  /* ================= LDPC：IRA 结构（信息位按码率选度分布 + 校验位双对角），分层归一化最小和译码 =================
+   * 由 (n, k) 确定性构造（收发两端各自生成同一张图），尽量避开 4 环。同样码率下比 K=7 卷积码约好 1.6~1.8 dB（test/sim/ldpc-proto.js） */
+  const ldpcCache = new Map();
+  function ldpcCode(n, k) {
+    const key = n + ':' + k; let code = ldpcCache.get(key); if (code) return code;
+    const m = n - k, R = k / n, dvList = R < 0.58 ? [4, 4, 4, 4, 10] : R < 0.7 ? [3, 3, 6] : [3, 3, 3, 3, 8];
+    let a = (Math.imul(n, 7919) ^ k) >>> 0 || 1;
+    const rnd = () => { a ^= a << 13; a >>>= 0; a ^= a >>> 17; a ^= a << 5; a >>>= 0; return a / 4294967296; };
+    let tot = 0; for (let i = 0; i < k; i++) tot += Math.min(dvList[i % dvList.length], m);
+    const deck = new Int32Array(tot); for (let t = 0; t < tot; t++) deck[t] = t % m;
+    for (let t = tot - 1; t > 0; t--) { const j = (rnd() * (t + 1)) | 0, x = deck[t]; deck[t] = deck[j]; deck[j] = x; }
+    const pairs = new Set(), pk = (x, y) => x < y ? x * m + y : y * m + x;
+    for (let j = 0; j + 1 < m; j++) pairs.add(pk(j, j + 1));
+    const rows = Array.from({ length: m }, () => []);
+    let p = 0;
+    for (let i = 0; i < k; i++) {
+      const dv = Math.min(dvList[i % dvList.length], m), ch = [];
+      for (let t = 0; t < dv; t++) {
+        let pick = -1;
+        for (let q = p; q < tot && q < p + 400; q++) { const c = deck[q]; if (!ch.includes(c) && !ch.some(c2 => pairs.has(pk(c, c2)))) { pick = q; break; } }
+        if (pick < 0) for (let q = p; q < tot; q++) if (!ch.includes(deck[q])) { pick = q; break; }
+        if (pick < 0) pick = p;
+        const c = deck[pick]; deck[pick] = deck[p]; deck[p] = c; p++; ch.push(c);
+      }
+      for (let x = 0; x < ch.length; x++) for (let y = x + 1; y < ch.length; y++) pairs.add(pk(ch[x], ch[y]));
+      for (const c of ch) rows[c].push(i);
+    }
+    const infoRows = rows.map(r => Int32Array.from(r));
+    for (let j = 0; j < m; j++) { rows[j].push(k + j); if (j + 1 < m) rows[j + 1].push(k + j); }
+    const start = new Int32Array(m + 1); for (let c = 0; c < m; c++) start[c + 1] = start[c] + rows[c].length;
+    const ev = new Int32Array(start[m]); for (let c = 0; c < m; c++) ev.set(rows[c], start[c]);
+    let dmax = 0; for (let c = 0; c < m; c++) dmax = Math.max(dmax, rows[c].length);
+    code = { n, k, m, start, ev, infoRows, L: new Float32Array(n), R: new Float32Array(ev.length), Q: new Float32Array(dmax) };
+    ldpcCache.set(key, code); return code;
+  }
+  function ldpcEncode(code, info) {
+    const { n, k, m, infoRows } = code, cw = new Uint8Array(n); cw.set(info);
+    let prev = 0;
+    for (let j = 0; j < m; j++) { let x = prev; const r = infoRows[j]; for (let t = 0; t < r.length; t++) x ^= info[r[t]]; cw[k + j] = x; prev = x; }
+    return cw;
+  }
+  /** 分层归一化最小和。llr 按码字顺序（正 = 0）。8 轮后仍有 >15% 校验不满足就放弃（多半是混帧过渡带里的块） */
+  function ldpcDecode(code, llr, maxIt = 40) {
+    const { k, m, start, ev, L, R, Q } = code, alpha = 0.75;
+    L.set(llr); R.fill(0);
+    for (let it = 0; it < maxIt; it++) {
+      for (let c = 0; c < m; c++) {
+        const s0 = start[c], s1 = start[c + 1];
+        let m1 = 1e30, m2 = 1e30, idx = -1, sg = 0;
+        for (let e = s0; e < s1; e++) {
+          const q = L[ev[e]] - R[e]; Q[e - s0] = q;
+          const a = q < 0 ? -q : q;
+          if (a < m1) { m2 = m1; m1 = a; idx = e; } else if (a < m2) m2 = a;
+          if (q < 0) sg ^= 1;
+        }
+        for (let e = s0; e < s1; e++) {
+          const q = Q[e - s0], mag = (e === idx ? m2 : m1) * alpha, r = (sg ^ (q < 0 ? 1 : 0)) ? -mag : mag;
+          R[e] = r; L[ev[e]] = q + r;
+        }
+      }
+      let bad = 0;
+      for (let c = 0; c < m; c++) { let x = 0; for (let e = start[c]; e < start[c + 1]; e++) if (L[ev[e]] < 0) x ^= 1; bad += x; }
+      if (!bad) break;
+      if (it >= 7 && bad > m * 0.15) return null;
+    }
+    const out = new Uint8Array(k); for (let i = 0; i < k; i++) out[i] = L[i] < 0 ? 1 : 0;
+    return out;
+  }
+  /** LDPC 版：信息位 → n 个发送位（交织、加扰同卷积码版） */
+  function codeBitsLdpc(info, n, seed) {
+    const cw = ldpcEncode(ldpcCode(n, info.length), info), il = interleaver(n), sc = scrambler(n, seed), out = new Uint8Array(n);
+    for (let i = 0; i < n; i++) out[il[i]] = cw[i];
+    for (let i = 0; i < n; i++) out[i] ^= sc[i];
+    return out;
+  }
+  let lL = new Float32Array(0);
+  function decodeBitsLdpc(llr, nInfo, seed) {
+    const n = llr.length, il = interleaver(n), sc = scrambler(n, seed);
+    if (lL.length !== n) lL = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const j = il[i]; lL[i] = sc[j] ? -llr[j] : llr[j]; }
+    return ldpcDecode(ldpcCode(n, nInfo), lL);
+  }
+
   const toBits = (u8, out, at) => { for (let i = 0; i < u8.length; i++) for (let b = 0; b < 8; b++) out[at + i * 8 + b] = (u8[i] >> (7 - b)) & 1; };
   const fromBits = (bits, at, nBytes) => { const u8 = new Uint8Array(nBytes);
     for (let i = 0; i < nBytes; i++) { let v = 0; for (let b = 0; b < 8; b++) v = (v << 1) | bits[at + i * 8 + b]; u8[i] = v; } return u8; };
@@ -132,8 +215,8 @@
   const layoutCache = new Map();
   /** p = {cols, rows, levels:[lr,lg,lb], rate: RATES 下标, tile} */
   function makeLayout(p) {
-    const cols = p.cols | 0, rows = p.rows | 0, levels = p.levels.map(Number), rateIdx = p.rate | 0, tile = p.tile | 0;
-    const key = [cols, rows, levels.join(''), rateIdx, tile].join(',');
+    const cols = p.cols | 0, rows = p.rows | 0, levels = p.levels.map(Number), rateIdx = p.rate | 0, tile = p.tile | 0, fec = p.fec === 'conv' ? 'conv' : 'ldpc';
+    const key = [cols, rows, levels.join(''), rateIdx, tile, fec].join(',');
     let L = layoutCache.get(key); if (L) return L;
     if (!(cols & 1) || !(rows & 1) || cols < 31 || rows < 31 || cols > 255 || rows > 255) throw new Error('版面尺寸必须是 31..255 的奇数');
     if (!levels.every(l => l === 2 || l === 4) || !RATES[rateIdx] || tile < 8 || tile > 63) throw new Error('版面参数不合法');
@@ -174,7 +257,7 @@
     }
     const T = Math.max(1, Math.round(order.length / Math.max(64, tile * tile * 0.8))), per = Math.floor(order.length / T);
     const rate = RATES[rateIdx];
-    const C = ((Math.floor(per * bpc * rate) - 6 - 64) >> 3) & ~3;
+    const C = ((Math.floor(per * bpc * rate) - (fec === 'conv' ? 6 : 0) - 64) >> 3) & ~3;
     if (C < 16) throw new Error('数据块太小');
     const nInfo = 64 + C * 8;
     const tiles = [];
@@ -199,7 +282,7 @@
       let r0 = rows, r1 = 0; for (const k of m) { const r = (k / cols) | 0; r0 = Math.min(r0, r); r1 = Math.max(r1, r + 1); }
       return pilotsNear(r0 - 4, r1 + 4, 0, cols, true);
     });
-    L = { cols, rows, N, levels, rateIdx, rate, tile, chBits, bpc, role, dark, pil, pilA, meta, metaPilots, tiles, T: tiles.length, C, nInfo, key };
+    L = { cols, rows, N, levels, rateIdx, rate, tile, fec, chBits, bpc, role, dark, pil, pilA, meta, metaPilots, tiles, T: tiles.length, C, nInfo, key };
     layoutCache.set(key, L);
     return L;
   }
@@ -213,7 +296,7 @@
     b[5] = s.K >>> 16; b[6] = (s.K >>> 8) & 255; b[7] = s.K & 255;
     dv.setUint32(8, s.len); dv.setUint32(12, parseInt(s.crc, 16)); dv.setUint16(16, s.C);
     b[18] = L.cols; b[19] = L.rows;
-    b[20] = (L.levels[0] === 4 ? 1 : 0) | (L.levels[1] === 4 ? 2 : 0) | (L.levels[2] === 4 ? 4 : 0) | (L.rateIdx << 3);
+    b[20] = (L.levels[0] === 4 ? 1 : 0) | (L.levels[1] === 4 ? 2 : 0) | (L.levels[2] === 4 ? 4 : 0) | (L.rateIdx << 3) | (L.fec === 'ldpc' ? 64 : 0);
     b[21] = L.tile;
     const all = new Uint8Array(META_BYTES + 4); all.set(b); new DataView(all.buffer).setUint32(META_BYTES, crc32n(b));
     return all;
@@ -224,7 +307,7 @@
     const sid = String.fromCharCode(b[1], b[2], b[3], b[4]);
     if (!SID_RE.test(sid)) return null;
     return { sid, K: (b[5] << 16) | (b[6] << 8) | b[7], len: dv.getUint32(8), crc: dv.getUint32(12).toString(16).toUpperCase().padStart(8, '0'),
-      C: dv.getUint16(16), cols: b[18], rows: b[19], levels: [b[20] & 1 ? 4 : 2, b[20] & 2 ? 4 : 2, b[20] & 4 ? 4 : 2], rate: (b[20] >> 3) & 7, tile: b[21] };
+      C: dv.getUint16(16), cols: b[18], rows: b[19], levels: [b[20] & 1 ? 4 : 2, b[20] & 2 ? 4 : 2, b[20] & 4 ? 4 : 2], rate: (b[20] >> 3) & 7, fec: b[20] & 64 ? 'ldpc' : 'conv', tile: b[21] };
   }
   const sidBytes = sid => Uint8Array.from(sid, ch => ch.charCodeAt(0));
   function tileInfoBits(L, sid, seq, payload) {
@@ -275,7 +358,8 @@
       const L = this.L, rgb = this.base.slice();
       L.tiles.forEach((t, j) => {
         const info = tileInfoBits(L, this.s.sid, seqs[j], this.s.payload(seqs[j]));
-        putCells(L, t.cells, codeBits(info, t.cells.length * L.bpc, j + 1), rgb);
+        const n = t.cells.length * L.bpc;
+        putCells(L, t.cells, L.fec === 'ldpc' ? codeBitsLdpc(info, n, j + 1) : codeBits(info, n, j + 1), rgb);
       });
       return rgb;
     }
@@ -629,7 +713,9 @@
     for (let j = 0; j < L.T; j++) {
       const t = L.tiles[j], cal = calibrate(L, obs, t.pilots); if (!cal) continue;
       const llr = cellLLR(cal, obs, t.cells, L.levels, new Float32Array(t.cells.length * L.bpc));
-      const bits = decodeBits(llr, L.nInfo, j + 1), bytes = fromBits(bits, 0, 8 + L.C), dv = new DataView(bytes.buffer);
+      const bits = L.fec === 'ldpc' ? decodeBitsLdpc(llr, L.nInfo, j + 1) : decodeBits(llr, L.nInfo, j + 1);
+      if (!bits) continue;
+      const bytes = fromBits(bits, 0, 8 + L.C), dv = new DataView(bytes.buffer);
       const ck = new Uint8Array(8 + L.C); ck.set(sb); ck.set(bytes.subarray(0, 4 + L.C), 4);
       if (crc32n(ck) !== dv.getUint32(4 + L.C)) continue;
       okTiles++;
@@ -639,14 +725,14 @@
   }
 
   /** 由「长边格数 + 宽高比 + 色阶 + 码率 + 块大小」得出版面参数（奇数格） */
-  function profile({ long = 97, aspect = 1, levels = [2, 2, 2], rate = 2, tile = 24 }) {
+  function profile({ long = 97, aspect = 1, levels = [2, 2, 2], rate = 2, tile = 24, fec = 'ldpc' }) {
     const odd = x => Math.max(31, Math.min(255, (Math.round(x) | 1)));
     const a = Math.max(1, aspect), cols = odd(long), rows = odd(long / a);
-    return { cols, rows, levels, rate, tile };
+    return { cols, rows, levels, rate, tile, fec };
   }
 
   const api = { makeLayout, profile, GridFramer, readFrame, LEVELS, RATES, QUIET,
-    _: { convEncode, viterbi, codeBits, decodeBits, luma, binarize, findFinders, pickQuads, readEdge, fitHomography, unpackMeta, packMeta } };
+    _: { convEncode, viterbi, codeBits, decodeBits, ldpcCode, ldpcEncode, ldpcDecode, codeBitsLdpc, decodeBitsLdpc, luma, binarize, findFinders, pickQuads, readEdge, fitHomography, unpackMeta, packMeta } };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.QXG = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -14,8 +14,8 @@ function randText(n) {
   let s = ''; for (let i = 0; i < n; i++) s += A[(Math.random() * A.length) | 0]; return s;
 }
 
-/** 在 PWA 发送页生成帧并逐帧截图 → [{label, png(dataURL)}]。kind='qr' | 'grid'（grid 时 preset=档位如 '242:4'、long=格子） */
-async function captureSender(url, text, { kind = 'qr', rgb = false, chunk = 400, extra = 30, preset = '242:4', long = 85 } = {}) {
+/** 在 PWA 发送页生成帧并逐帧截图 → [{label, png(dataURL)}]。kind='qr' | 'grid'（grid 时 preset=档位如 '242:5'、long=格子） */
+async function captureSender(url, text, { kind = 'qr', rgb = false, chunk = 400, extra = 30, preset = '242:5', long = 85 } = {}) {
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 900, height: 1000 } });
   await p.goto(url + '?tab=send');

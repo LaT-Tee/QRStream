@@ -282,9 +282,9 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:
         <label class="field"><span>档位</span>
           <select id="gLv">
             <option value="222:4">稳 · 8 色</option>
-            <option value="242:4" selected>标准 · 16 色</option>
-            <option value="444:2">快 · 64 色</option>
-            <option value="444:4">极速 · 64 色，光线好、手稳</option>
+            <option value="242:5" selected>标准 · 16 色</option>
+            <option value="442:4">快 · 32 色</option>
+            <option value="444:5">极速 · 64 色，光线好、手稳</option>
           </select></label>
         <label class="field"><span>格子</span>
           <select id="gLong">
@@ -613,7 +613,7 @@ function onScan(e) {
     const s = (now - perf.t) / 1000, avgMs = (perf.ms / Math.max(1, perf.n)).toFixed(1);
     const gr = perf.gOf ? perf.gOk / perf.gOf : 0;
     const tip = !perf.gOf ? '' : gr < 0.6 ? '　· 块成功率低：靠近些/拿稳，或发送端换更稳的档位、更大的格子'
-      : gr > 0.97 && perf.gLv !== '444:4' ? '　· 很稳，发送端可以试更快的档位' : '';
+      : gr > 0.97 && perf.gLv !== '444:5' ? '　· 很稳，发送端可以试更快的档位' : '';
     $('perf').textContent = perf.gOf
       ? `彩格码 · 解码 ${(perf.n / s).toFixed(1)} 次/秒 · 块 ${perf.gOk}/${perf.gOf}（${(gr * 100).toFixed(0)}%） · ${avgMs} ms/次${tip}`
       : `${engine} · 解码 ${(perf.n / s).toFixed(1)} 次/秒 · 识别 ${(perf.ok / s).toFixed(1)} 码/秒${perf.rgb ? '（RGB）' : ''} · ${avgMs} ms/次`;

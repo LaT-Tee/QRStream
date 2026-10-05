@@ -18,6 +18,19 @@ const check = (c, m) => { console.log((c ? '  ✔ ' : '  ✘ ') + m); if (!c) fa
   }
   check(errs === 0, `卷积码软判决纠错（误位 ${errs}）`);
 }
+// 1b) LDPC：码率 1/2~4/5 加噪声后能纠正；卷积码版面（旧发送端）仍能读
+{
+  const { rng } = require('../sim/camera.js'), r = rng(42);
+  const gauss = () => { let u = 0; while (!u) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
+  let errs = 0, flips = 0;
+  for (const n of [2432, 1824, 1621, 1520]) {
+    const info = Uint8Array.from({ length: 1216 }, () => r() < 0.5 ? 1 : 0), R = 1216 / n, sigma = Math.sqrt(1 / (2 * R * Math.pow(10, 0.4)));  // Eb/N0 = 4 dB
+    const llr = Float32Array.from(G._.codeBitsLdpc(info, n, 5), b => { const y = (b ? -1 : 1) + sigma * gauss(); if ((y < 0) !== !!b) flips++; return 2 * y / (sigma * sigma); });
+    const out = G._.decodeBitsLdpc(llr, 1216, 5);
+    errs += out ? out.reduce((a, v, i) => a + (v !== info[i]), 0) : 1216;
+  }
+  check(errs === 0 && flips > 100, `LDPC 软判决纠错（信道翻转 ${flips} 位，译码后误位 ${errs}）`);
+}
 // 2) 版面：块等分、无重叠
 for (const [long, lv, rate] of [[73, [2, 2, 2], 4], [85, [2, 4, 2], 4], [97, [4, 4, 4], 2]]) {
   const L = G.makeLayout(G.profile({ long, levels: lv, rate, tile: 24 }));
@@ -43,6 +56,12 @@ for (const [name, o, need] of [
   const r = G.readFrame(shoot([img(0), img(1)], { W: 720, H: 720, fill: 0.85, cond: 'typical', seed: 9, mix: { y0: 0.45, band: 0.1 } }), 720, 720);
   const a = r.frames.filter(f => f.seq < L.T).length, b = r.frames.filter(f => f.seq >= L.T).length;
   check(r.ok && a > 0 && b > 0 && valid(r), `混帧：一张照片里同时解出上一帧 ${a} 块、下一帧 ${b} 块`);
+}
+{
+  const Lc = G.makeLayout({ ...G.profile({ long: 85, levels: [2, 4, 2], rate: 4, tile: 24 }), fec: 'conv' });
+  const sc = fakeSession(Lc.C, 300), fc = new G.GridFramer(sc, Lc);
+  const r = G.readFrame(shoot([fc.paint(Array.from({ length: Lc.T }, (_, j) => j))], { W: 720, H: 720, fill: 0.85, cond: 'typical', seed: 11 }), 720, 720);
+  check(r.ok && r.meta.fec === 'conv' && r.okTiles === r.tiles, `兼容 1.1.0 的卷积码彩格码：解出 ${r.okTiles || 0}/${r.tiles || Lc.T} 块`);
 }
 // 4) 整段传输：仿真摄像头逐张拍 → 喷泉码还原
 {

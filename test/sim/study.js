@@ -33,7 +33,7 @@ async function runJob(j) {
     return { ok, of: frames.length, bytes: ok * s.C, pxPerCell: j.fill * Math.min(W, H) / (s.type * 4 + 17 + 8) };
   }
   const G = require('../../src/grid-code.js');
-  const L = G.makeLayout(G.profile({ long: j.long, aspect: j.aspect || 1, levels: j.levels, rate: j.rate, tile: j.tile }));
+  const L = G.makeLayout(G.profile({ long: j.long, aspect: j.aspect || 1, levels: j.levels, rate: j.rate, tile: j.tile, fec: j.fec || 'ldpc' }));
   const sess = fakeSession(L.C), f = new G.GridFramer(sess, L);
   const seqs = k => Array.from({ length: L.T }, (_, i) => k * L.T + i);
   const screens = [f.paint(seqs(0))];
@@ -130,8 +130,8 @@ async function study(name, configs, { trials = 6, conds = CONDS, mixFrac = 0 } =
 
 const QR = { kind: 'qr', chunk: 500, rgb: true, label: 'QR RGB×3（现状 500B）' };
 const QRM = { kind: 'qr', chunk: 500, rgb: false, label: 'QR 黑白（500B）' };
-const grid = (long, levels, rate, tile = 24) => ({ kind: 'grid', long, levels, rate, tile,
-  label: `彩格 ${long}格 ${levels.join('')}色阶 R=${['1/3', '2/5', '1/2', '3/5', '2/3', '3/4', '4/5'][rate]} 块${tile}` });
+const grid = (long, levels, rate, tile = 24, fec = 'ldpc') => ({ kind: 'grid', long, levels, rate, tile, fec,
+  label: `彩格 ${long}格 ${levels.join('')}色阶 R=${['1/3', '2/5', '1/2', '3/5', '2/3', '3/4', '4/5'][rate]}${fec === 'conv' ? ' 卷积' : ' LDPC'}${tile === 24 ? '' : ' 块' + tile}` });
 
 (async () => {
   const which = process.argv[2] || 'all';
@@ -141,6 +141,9 @@ const grid = (long, levels, rate, tile = 24) => ({ kind: 'grid', long, levels, r
       grid(n, [4, 4, 4], 1), grid(n, [4, 4, 4], 2), grid(n, [4, 4, 4], 4)])], { trials: 8 });
   if (which === 'density' || which === 'all') await study('density', [QR,
     ...[73, 85, 97, 113].flatMap(n => [grid(n, [2, 2, 2], 4), grid(n, [2, 4, 2], 2), grid(n, [4, 4, 4], 2)])], { trials: 8 });
+  if (which === 'ldpc' || which === 'all') await study('ldpc', [QR,
+    grid(85, [2, 2, 2], 4, 24, 'conv'), grid(85, [2, 4, 2], 4, 24, 'conv'), grid(85, [4, 4, 4], 2, 24, 'conv'), grid(85, [4, 4, 4], 4, 24, 'conv'),
+    ...[[2, 2, 2], [2, 4, 2], [4, 4, 2], [4, 4, 4]].flatMap(lv => [2, 4, 5, 6].map(r => grid(85, lv, r)))], { trials: 8 });
   if (which === 'tile' || which === 'all') await study('tile', [QR,
     ...[16, 24, 32].flatMap(t => [grid(85, [2, 2, 2], 4, t), grid(85, [2, 4, 2], 2, t)])], { conds: ['typical', 'bad'], mixFrac: 0.3, trials: 10 });
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         QRStream Sender
 // @namespace    qrstream.sender
-// @version      1.1.0
+// @version      1.2.0
 // @license      MIT
 // @description  Alt+Q 打开面板。喷泉码 + 32 位帧校验 + 固定 QR 版本 + 可选 RGB 三通道（×3）。依赖全部内联，离线可用
 // @match        *://*/*

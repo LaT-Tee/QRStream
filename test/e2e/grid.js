@@ -20,8 +20,8 @@ function mixed(a, b, cut, band = 0.08) {
   const srv = await serve(WEB, 8767);
   const URL = 'http://localhost:8767/';
   try {
-    for (const preset of ['222:4', '242:4', '444:2', '444:4']) {
-      const text = randText(preset.startsWith('444') ? 30000 : 15000);
+    for (const preset of ['222:4', '242:5', '442:4', '444:5']) {
+      const text = randText(preset.startsWith('44') ? 30000 : 15000);
       const cap = await captureSender(URL, text, { kind: 'grid', preset, extra: 3 });
       console.log(`\n[彩格码 ${preset}] K=${cap.K} 每张 ${cap.per} 块 张数=${cap.frames.length}  ${cap.frames[0].label}`);
       const r = await receive(URL, makeVideo(cap.frames, 'grid-' + preset.replace(':', '-')));
@@ -33,7 +33,7 @@ function mixed(a, b, cut, band = 0.08) {
 
     console.log('\n[混帧] 每张都是相邻两帧上下拼接（分界位置随机）');
     const text = randText(15000);
-    const cap = await captureSender(URL, text, { kind: 'grid', preset: '242:4', extra: 6 });
+    const cap = await captureSender(URL, text, { kind: 'grid', preset: '242:5', extra: 20 });
     const mix = [];
     for (let i = 0; i + 1 < cap.frames.length; i++) for (const cut of [0.3, 0.7]) mix.push({ png: mixed(cap.frames[i].png, cap.frames[i + 1].png, cut + (i % 3) * 0.05) });
     const r = await receive(URL, makeVideo(mix, 'grid-mix', { codesPerSec: 15 }));
