@@ -5,7 +5,7 @@
 ## 1. 总览
 
 ```
-文件/文本 ──► [可选 deflate] ──────────► 数据包 ──► 切成 K 个 C 字节源块
+文件/文本 ──► [可选 deflate / LZMA] ───► 数据包 ──► 切成 K 个 C 字节源块
                                                           │
                        系统帧 SEQ=0..K-1（源块原样） ◄──────┤
                        冗余帧 SEQ≥K（若干源块的 XOR）◄──────┘   ← GF(2) 随机线性喷泉码
@@ -21,7 +21,7 @@
 |---|---|---|
 | 0 | 4 | `metaLen`，大端 uint32 |
 | 4 | metaLen | meta，UTF-8 JSON |
-| 4 + metaLen | 其余 | 数据（可能已 deflate） |
+| 4 + metaLen | 其余 | 数据（可能已压缩，见 `z`） |
 
 meta 字段：
 
@@ -30,7 +30,7 @@ meta 字段：
 | `t` | `"text"` \| `"file"` | 类型 |
 | `name` | string | 文件名（文本为 `text.txt`） |
 | `mime` | string | MIME 类型 |
-| `z` | bool | 数据是否经过 zlib 格式 deflate（`CompressionStream('deflate')`） |
+| `z` | `false` \| `true` \| `"lzma"` | 压缩方式：`false` 不压缩；`true` 为 zlib 格式 deflate（`CompressionStream('deflate')`）；`"lzma"`（1.4.0 起）为 LZMA-alone 格式（`.lzma`：13 字节头 + LZMA 流，与 7-Zip / xz-utils `--format=lzma` 相同），发送端用 LZMA-JS 第 3 级压缩。1.3.0 及更早的接收端不认识 `"lzma"`，会报解压失败 |
 | `len` | number | **解压后**数据的字节数，用于校验 |
 
 数据包总长记为 `LEN`。选取块大小 `C`（4 的倍数，≥ 52），`K = ceil(LEN / C)`，末块补 0 到 `K × C`。

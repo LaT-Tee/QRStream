@@ -32,6 +32,16 @@ function mixed(a, b, cut, band = 0.08) {
       await r.close();
     }
 
+    console.log('\n[LZMA] 表格类文本：发送页自动选 LZMA，接收端解压并显示速度');
+    {
+      const csv = Array.from({ length: 1500 }, (_, i) => `${i},2026-10-${(i % 28) + 1},用户${i % 97},${(i * 37 % 1000) / 10},上海市,${i % 3 ? '已完成' : '待处理'}`).join('\n');
+      const cap = await captureSender(URL, csv, { kind: 'grid', extra: 3 });
+      const r = await receive(URL, makeVideo(cap.frames, 'grid-lzma'));
+      console.log('  ' + r.status);
+      check(r.ok && r.text === csv && /LZMA/.test(r.status) && /平均 [\d.]+ (B|KB|MB)\/秒/.test(r.status), 'LZMA：还原一致，完成时显示平均速度和压缩方式');
+      await r.close();
+    }
+
     console.log('\n[混帧] 每张都是相邻两帧上下拼接（分界位置随机）');
     const text = randText(15000);
     const cap = await captureSender(URL, text, { kind: 'grid', extra: 20 });

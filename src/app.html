@@ -111,7 +111,10 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:
 #result .acts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 #result .acts .btn{min-height:42px}
 #result textarea{width:100%;min-height:32dvh;resize:vertical;padding:14px;border-radius:10px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);font:14px/1.6 var(--sans);outline:none}
-#result img{display:block;max-width:100%;border-radius:8px;background:#fff}
+/* iPhone：结果区除文本框外都不可选中，长按图片直接出「存储到照片」，不会先选中文字 */
+#result{-webkit-user-select:none;user-select:none}
+#result textarea{-webkit-user-select:text;user-select:text}
+#result img{display:block;max-width:100%;border-radius:8px;background:#fff;-webkit-touch-callout:default}
 .fileinfo{display:flex;align-items:center;gap:12px}
 .fileinfo .ext{width:44px;height:44px;display:grid;place-items:center;background:var(--ink);color:var(--paper);font:900 13px var(--dot)}
 
@@ -229,7 +232,7 @@ input.sw:checked::before{transform:translateX(18px)}
           <label><input type="radio" name="kind" id="kGrid" value="grid" checked><b>彩格码</b><span class="pal" id="palGrid"></span><small>最快。用本应用接收</small></label>
           <label><input type="radio" name="kind" id="kQr" value="qr"><b>二维码</b><span class="pal" id="palQr"></span><small>旧版和油猴接收端也能读</small></label>
         </div>
-        <label class="switch"><span>压缩<small>无损，能省 5% 以上才启用</small></span><input type="checkbox" class="sw" id="sZ" checked></label>
+        <label class="switch"><span>压缩<small>无损，自动选 LZMA（7z 同款算法）或 deflate 里更小的</small></span><input type="checkbox" class="sw" id="sZ" checked></label>
       </div>
     </div>
     <button class="btn solid big" id="sGen">开始播放</button>
@@ -261,6 +264,7 @@ input.sw:checked::before{transform:translateX(18px)}
 <script>/*@QRCODE_LIB*/</script>
 <script>/*@CODEC*/</script>
 <script>/*@GRID_CODE*/</script>
+<script>/*@LZMA*/</script>
 <script>/*@SENDER_CORE*/</script>
 <script>
 (() => {
@@ -408,12 +412,16 @@ function onDec(e) {
       stopScan();
       if (cells) for (let i = 0; i < m.K; i++) setCell(i, 2);   // 剩下的块都是收齐后由冗余数据消元解出的
       $('missing').textContent = ''; setPct(100);
-      setStatus(`✅ 收好了：${m.meta.t === 'text' ? '一段文字' : m.meta.name}，${fmtB(m.meta.len)}，用时 ${m.secs.toFixed(1)} 秒（收了 ${m.received} 块，最少要 ${m.K} 块）。`, true);
+      {
+        const secs = Math.max(0.1, m.secs), zip = m.meta.z ? `，压缩后实际传了 ${fmtB(m.plen)}（${m.meta.z === 'lzma' ? 'LZMA' : 'deflate'}）` : '';
+        setStatus(`✅ 收好了：${m.meta.t === 'text' ? '一段文字' : m.meta.name}，${fmtB(m.meta.len)}。用时 ${secs.toFixed(1)} 秒，平均 ${fmtB(m.meta.len / secs)}/秒${zip}。`, true);
+        log(`${S && S.note ? S.note + '；' : ''}收了 ${m.received} 块，最少要 ${m.K} 块。`);
+      }
       if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
       showResult(m.meta, new Uint8Array(m.data));
       break;
     case 'fail': if (S) S.done = true; stopScan(); setStatus('❌ ' + m.msg); break;
-    case 'log': log(m.msg); break;
+    case 'log': log(m.msg); if (S && /恢复/.test(m.msg)) S.note = m.msg; break;
     case 'foreign': log('不是本应用的码：' + m.text); break;
     case 'reset': log('已清空（含本机保存的续传进度）'); break;
   }
@@ -442,7 +450,7 @@ function showResult(meta, data) {
   } else if (meta.mime.startsWith('image/')) {
     const img = document.createElement('img'); img.src = url; r.appendChild(img);
     const tip = document.createElement('div'); tip.className = 'tiny'; tip.style.marginTop = '10px';
-    tip.textContent = 'iPhone 可长按图片 →「添加到照片」'; r.appendChild(tip);
+    tip.textContent = 'iPhone：长按图片 →「存储到照片」，或点「分享」→「存储图像」。'; r.appendChild(tip);
   } else {
     const fi = document.createElement('div'); fi.className = 'fileinfo';
     const ext = (meta.name.split('.').pop() || 'bin').slice(0, 4).toUpperCase();
@@ -592,7 +600,8 @@ function showSInfo() {
   const per = sGrid ? sGrid.per : 3, secs = (sess.K + 2) / per * INTERVAL_MS / 1000;
   el.dataset.k = sess.K; el.dataset.per = per; el.dataset.ver = sGrid ? 'grid' : sess.type;
   const t = secs < 60 ? `约 ${Math.max(1, Math.ceil(secs))} 秒` : `约 ${(secs / 60).toFixed(1)} 分钟`;
-  el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? '（已压缩）' : ''}，满速 ${fmtB(1000 / INTERVAL_MS * per * sess.C)}/秒，${t}传完。`
+  const zip = sess.meta.z ? `，压缩后 ${fmtB(sess.len)}（${sess.meta.z === 'lzma' ? 'LZMA' : 'deflate'}）` : '';
+  el.innerHTML = `${fmtB(sess.meta.len)}${zip}，${t}传完。`
     + `<small>接收端收到任意 ${sess.K + 2} 块就能还原，漏掉的不用等下一轮。会话 ${sess.sid}</small>`;
 }
 
@@ -600,7 +609,9 @@ $('sGen').onclick = async () => {
   player.stop(); syncPlayBtn();
   $('sGen').disabled = true; $('sErr').textContent = '';
   try {
-    const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('sText').value, compress: $('sZ').checked });
+    $('sGen').textContent = $('sZ').checked ? '压缩中…' : '准备中…';
+    const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('sText').value, compress: $('sZ').checked,
+      onProgress: p => { $('sGen').textContent = `压缩中 ${Math.round(p * 100)}%`; } });
     let s, grid = null;
     if (kind() === 'grid') {
       const L = QXG.makeLayout(QXG.profile(GRID));
@@ -617,7 +628,7 @@ $('sGen').onclick = async () => {
     player.play(); syncPlayBtn(); keepAwake(true);
     if (innerWidth < 900) $('stage').scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (e) { $('sErr').textContent = e.message; }
-  finally { $('sGen').disabled = false; $('sGen').blur(); }
+  finally { $('sGen').disabled = false; $('sGen').textContent = '开始播放'; $('sGen').blur(); }
 };
 const togglePlay = () => { if (!sess) return; player.playing ? player.stop() : player.play(); syncPlayBtn(); keepAwake(player.playing); };
 const step = d => { if (!sess) return; player.stop(); syncPlayBtn(); player.step(d); };

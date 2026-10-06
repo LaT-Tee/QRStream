@@ -1,4 +1,4 @@
-/* 发送端核心（油猴脚本和 PWA 共用）。依赖：全局 qrcode（qrcode-generator）、QX（codec.js）。 */
+/* 发送端核心（油猴脚本和 PWA 共用）。依赖：全局 qrcode（qrcode-generator）、QX（codec.js）、LZMA（LZMA-JS，可选）。 */
 (function (root) {
   'use strict';
   const QX = root.QX || (typeof require === 'function' ? require('./codec.js') : null);
@@ -11,22 +11,45 @@
     const buf = await new Response(new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer();
     return new Uint8Array(buf);
   }
-  /** opts: {file|null, text, compress} → {meta, data}。文件按原样发送（不改格式、不缩放）；compress=true 时尝试 deflate，省 ≥5% 才采用 */
+  /* LZMA（7z / xz 用的算法，LZMA-JS 实现）：比 deflate 再小 12%–37%（文本、表格、BMP 等），速度约为 deflate 的几分之一。
+   * 输出 .lzma（LZMA-alone）格式。等级 3 = 512 KB 字典：大文件比等级 1 小 15%，速度相同；更高等级几乎不再变小却慢好几倍 */
+  const LZMA_LEVEL = 3, LZMA_MAX = 32 << 20;
+  const lzmaLib = () => root.LZMA || (typeof require === 'function' ? (() => { try { return require('lzma/src/lzma_worker.js').LZMA; } catch (e) { return null; } })() : null);
+  async function lzmaCompress(u8, onProgress) {
+    const L = lzmaLib(); if (!L || u8.length > LZMA_MAX) return null;
+    const out = await new Promise((res, rej) => L.compress(u8, LZMA_LEVEL, (r, err) => err ? rej(err) : res(r), p => onProgress && onProgress(p)));
+    const c = Uint8Array.from(out, x => x & 255);
+    // 自检：解回来必须逐字节一致（LZMA-JS 解压时会把合法 UTF-8 还成字符串，这里连同这一步一起验证），否则不用 LZMA
+    const back = await new Promise(res => L.decompress(c, r => res(r)));
+    const b = typeof back === 'string' ? new TextEncoder().encode(back) : back ? Uint8Array.from(back, x => x & 255) : null;
+    if (!b || b.length !== u8.length) return null;
+    for (let i = 0; i < b.length; i++) if (b[i] !== u8[i]) return null;
+    return c;
+  }
+  /** opts: {file|null, text, compress, onProgress(0..1)} → {meta, data}。文件按原样发送（不改格式、不缩放）。
+   *  compress=true 时试 deflate 和 LZMA，取更小的；文件要省 ≥5% 才压缩。meta.z：false | true（deflate）| 'lzma' */
   async function prepareInput(opts) {
     let meta, data;
     if (opts.file) {
       const f = opts.file;
-      const mime = f.type || 'application/octet-stream', name = f.name || 'file.bin';
       data = new Uint8Array(await f.arrayBuffer());
-      meta = { t: 'file', name, mime, z: false, len: data.length };
-      if (opts.compress) {
-        const zd = await deflate(data); if (zd && zd.length < data.length * 0.95) { data = zd; meta.z = true; }
-      }
+      meta = { t: 'file', name: f.name || 'file.bin', mime: f.type || 'application/octet-stream', z: false, len: data.length };
     } else {
-      if (!opts.text) throw new Error('没有输入内容');
+      if (!opts.text) throw new Error('先输入要发送的文字，或选一个文件。');
       data = new TextEncoder().encode(opts.text);
       meta = { t: 'text', name: 'text.txt', mime: 'text/plain;charset=utf-8', z: false, len: data.length };
-      if (opts.compress) { const zd = await deflate(data); if (zd && zd.length < data.length) { data = zd; meta.z = true; } }
+    }
+    if (opts.compress) {
+      const limit = data.length * (opts.file ? 0.95 : 1);
+      let best = null;
+      const zd = await deflate(data);
+      if (zd && zd.length < limit) { best = zd; meta.z = true; }
+      // deflate 都省不到 5% 的（JPEG、ZIP、视频等已经压缩过的），LZMA 也省不了多少，直接跳过
+      if (best || (zd && zd.length < data.length * 0.95) || !zd) {
+        const lz = await lzmaCompress(data, opts.onProgress).catch(() => null);
+        if (lz && lz.length < (best ? best.length : limit)) { best = lz; meta.z = 'lzma'; }
+      }
+      if (best) data = best;
     }
     return { meta, data };
   }

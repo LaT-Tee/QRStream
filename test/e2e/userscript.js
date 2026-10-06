@@ -12,7 +12,7 @@ const { chromium, USERSCRIPT, check, finish } = require('../helpers/common');
   await p.setContent('<html><head><style>*{font-size:40px!important;color:red} button{display:none}</style></head><body><h1>any page</h1></body></html>');
   await p.addScriptTag({ content: fs.readFileSync(USERSCRIPT, 'utf8') });
   await p.keyboard.press('Alt+q');
-  await p.fill('#qrx-text', 'hello 彩格码 '.repeat(300));
+  await p.fill('#qrx-text', Array.from({ length: 1500 }, (_, i) => `${i},2026-10-${i % 28 + 1},彩格码${i % 97},${i * 37 % 1000 / 10}`).join('\n'));
   check(await p.locator('#qrx-gen').isVisible(), '宿主页面的全局 CSS 不影响面板（Shadow DOM 隔离）');
   for (const kind of ['grid', 'qr']) {
     if (kind === 'qr') await p.click('#qrx-edit');   // 播放时输入区收起，先点「换内容」
@@ -21,6 +21,8 @@ const { chromium, USERSCRIPT, check, finish } = require('../helpers/common');
     await p.waitForFunction(k => { const h = document.querySelector('qrstream-sender'); const i = h && h.shadowRoot.getElementById('qrx-info');
       return i && i.dataset.ver && (k === 'grid') === (i.dataset.ver === 'grid'); }, kind);
     await p.click('#qrx-pause');
+    if (kind === 'grid') { const info = await p.evaluate(() => document.querySelector('qrstream-sender').shadowRoot.getElementById('qrx-info').textContent);
+      check(/LZMA/.test(info) && !/秒\/|KB\/s/.test(info), '油猴：表格文本自动选 LZMA，发送端不显示速度'); }
     const png = PNG.sync.read(Buffer.from((await p.locator('#qrx-cv').evaluate(c => c.toDataURL())).split(',')[1], 'base64'));
     if (kind === 'grid') {
       // 四周补白边，按 2 倍放大，模拟一张理想照片

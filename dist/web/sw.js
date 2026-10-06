@@ -4,7 +4,7 @@
  *   缓存里如果存的是"经过重定向的响应"，浏览器拒绝把它用于页面导航 → 离线打不开。
  *   所以：① 页面本体用 "./" 缓存；② 任何 redirected 响应都先拷贝成干净的新 Response 再入缓存。
  */
-const VERSION = 'qrx4-3ae9acedd8';
+const VERSION = 'qrx4-5778126d00';
 const FILES = ["./","manifest.webmanifest","icon.png"];
 const SHELL = new URL('./', self.location).href;
 

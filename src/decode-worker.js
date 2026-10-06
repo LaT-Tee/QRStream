@@ -130,12 +130,17 @@ async function finish() {
     const dv = new DataView(pkt.buffer, pkt.byteOffset, pkt.byteLength), mlen = dv.getUint32(0);
     const meta = JSON.parse(new TextDecoder().decode(pkt.subarray(4, 4 + mlen)));
     let data = pkt.slice(4 + mlen);
-    if (meta.z) {
+    if (meta.z === 'lzma') {
+      if (!self.LZMA) throw new Error('缺少 LZMA 解压器');
+      const r = self.LZMA.decompress(data);     // 同步；合法 UTF-8 会还成字符串
+      if (r == null) throw new Error('LZMA 解压失败');
+      data = typeof r === 'string' ? new TextEncoder().encode(r) : Uint8Array.from(r, x => x & 255);
+    } else if (meta.z) {
       if (typeof DecompressionStream === 'undefined') throw new Error('此浏览器不支持解压（需 iOS 16.4+ / Chrome 80+），请在发送端取消压缩');
       data = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer());
     }
     if (data.length !== meta.len) throw new Error(`长度不一致 ${data.length} != ${meta.len}`);
-    post({ type: 'done', meta, data: data.buffer, secs, received: S.dec.received, K: S.K, solveMs: performance.now() - t }, [data.buffer]);
+    post({ type: 'done', meta, data: data.buffer, secs, plen: S.len, received: S.dec.received, K: S.K, solveMs: performance.now() - t }, [data.buffer]);
     await idbDeleteSession(S.sid);
   } catch (e) { post({ type: 'fail', msg: '解析失败：' + e.message }); }
 }

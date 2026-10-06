@@ -31,6 +31,9 @@
   (function (self) {
 /*@GRID_CODE*/
   })(NS);
+  (function () {
+/*@LZMA*/
+  }).call(NS);
   (function (self) {
 /*@SENDER_CORE*/
   })(NS);
@@ -135,7 +138,7 @@
                 <label><input type="radio" name="k" id="qrx-grid" checked><b>彩格码</b><span class="pal" id="palG"></span><small>最快。用 QRStream 接收</small></label>
                 <label><input type="radio" name="k" id="qrx-qr"><b>二维码</b><span class="pal" id="palQ"></span><small>旧版接收端也能读</small></label>
               </div>
-              <label class="sw"><span>压缩<small>无损，能省 5% 以上才启用</small></span><input type="checkbox" id="qrx-z" checked></label>
+              <label class="sw"><span>压缩<small>无损，自动选 LZMA 或 deflate 里更小的</small></span><input type="checkbox" id="qrx-z" checked></label>
             </div>
           </div>
           <button class="btn solid wide" id="qrx-gen">开始播放</button>
@@ -184,7 +187,7 @@
     const per = sGrid ? sGrid.per : 3, secs = (sess.K + 2) / per * INTERVAL_MS / 1000, el = $('qrx-info');
     el.dataset.k = sess.K; el.dataset.per = per; el.dataset.ver = sGrid ? 'grid' : sess.type;
     const t = secs < 60 ? `约 ${Math.max(1, Math.ceil(secs))} 秒` : `约 ${(secs / 60).toFixed(1)} 分钟`;
-    el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? '（已压缩）' : ''}，满速 ${fmtB(1000 / INTERVAL_MS * per * sess.C)}/秒，${t}传完。`
+    el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? `，压缩后 ${fmtB(sess.len)}（${sess.meta.z === 'lzma' ? 'LZMA' : 'deflate'}）` : ''}，${t}传完。`
       + `<small>接收端收到任意 ${sess.K + 2} 块就能还原。会话 ${sess.sid}</small>`;
   }
 
@@ -203,7 +206,9 @@
     player.stop();
     $('qrx-gen').disabled = true;
     await new Promise(r => setTimeout(r, 0));
-    const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('qrx-text').value, compress: $('qrx-z').checked });
+    $('qrx-gen').textContent = $('qrx-z').checked ? '压缩中…' : '准备中…';
+    const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('qrx-text').value, compress: $('qrx-z').checked,
+      onProgress: p => { $('qrx-gen').textContent = `压缩中 ${Math.round(p * 100)}%`; } }).finally(() => { $('qrx-gen').textContent = '开始播放'; });
     let s, grid = null;
     if ($('qrx-grid').checked) {
       const L = QXG.makeLayout(QXG.profile(GRID));
