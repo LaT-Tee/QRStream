@@ -3,19 +3,20 @@
 // @namespace    qrstream.sender
 // @version      /*@VERSION*/
 // @license      MIT
-// @description  Alt+Q 打开面板。喷泉码 + 32 位帧校验 + 固定 QR 版本 + 可选 RGB 三通道（×3）。依赖全部内联，离线可用
+// @description  Alt+Q 打开发送面板：彩格码（默认）或二维码，喷泉码抗丢帧。依赖全部内联，离线可用
 // @match        *://*/*
 // @grant        GM_registerMenuCommand
 // @run-at       document-idle
 // @noframes
 // ==/UserScript==
 
-/* 本脚本内联了 qrcode-generator（MIT, https://github.com/kazuhikoarase/qrcode-generator）
+/* eslint-disable */
+/* jshint ignore:start */
+/* 上面两行关掉 Tampermonkey 编辑器自带的代码检查：脚本内联了第三方库（qrcode-generator 等老式写法会反复 var 同名变量），
+ * 检查器会报一大堆「'i' is already defined」之类的提示。它们只是风格警告，不影响运行。
  *
- * 协议 QX4（接收端兼容 QX3）：
- *   QX4:<SID>:<K>:<LEN>:<CRC32>:<SEQ>:<FCK32>:<BASE45载荷>*
- *   SEQ<K 系统帧；SEQ>=K 冗余帧 = rowBits(SID,SEQ,K) 选中源块的 XOR（GF(2) 随机线性喷泉码）
- *   RGB 模式：一张图的 R/G/B 三个通道各放一个 QR（3 个连续 SEQ），版本固定所以三层完全对齐
+ * 本脚本内联了 qrcode-generator（MIT, https://github.com/kazuhikoarase/qrcode-generator）
+ * 协议见 https://github.com/LaT-Tee/QRStream/blob/main/docs/PROTOCOL.md（QX4 二维码、QX5 彩格码）
  */
 (function () {
   'use strict';
@@ -28,79 +29,141 @@
 /*@CODEC*/
   })(NS);
   (function (self) {
+/*@GRID_CODE*/
+  })(NS);
+  (function (self) {
 /*@SENDER_CORE*/
   })(NS);
-  const QXS = NS.QXS;
+  const QXS = NS.QXS, QXG = NS.QXG;
 
-  let root = null, sFile = null, sess = null, player = null;
+  /* 固定参数，与网页版一致（仿真选出的最优值，见 docs/SIMULATION.md） */
+  const INTERVAL_MS = 66;
+  const GRID = { long: 85, levels: [2, 4, 2], rate: 5, tile: 24 };
+  const QR = { chunk: 500, ecc: 'L', rgb: true };
 
-  function css() { return `
-    #qrx-root{position:fixed;z-index:2147483647;top:20px;right:20px;width:580px;max-height:calc(100vh - 40px);overflow:auto;
-      background:#fff;color:#222;border:1px solid #888;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.35);
-      font:13px/1.5 "Segoe UI","Meiryo","Microsoft YaHei",sans-serif;padding:10px}
-    #qrx-root *{box-sizing:border-box;font:inherit;color:inherit}
-    #qrx-root h3{margin:0 0 6px;font-weight:bold;font-size:15px;display:flex;justify-content:space-between;cursor:move}
-    #qrx-root textarea{width:100%;height:100px;border:1px solid #aaa;border-radius:4px;padding:4px;font-family:Consolas,monospace;background:#fff}
-    #qrx-root .row{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:6px 0}
-    #qrx-root input[type=number]{width:70px;border:1px solid #aaa;border-radius:3px;padding:1px 3px;background:#fff}
-    #qrx-root input[type=text]{border:1px solid #aaa;border-radius:3px;padding:1px 3px;background:#fff}
-    #qrx-root select{border:1px solid #aaa;background:#fff}
-    #qrx-root button{border:1px solid #666;background:#f2f2f2;border-radius:4px;padding:2px 10px;cursor:pointer}
-    #qrx-root button.primary{background:#0a64d8;color:#fff;border-color:#0a64d8}
-    #qrx-root canvas#qrx-cv{display:block;margin:6px auto;background:#fff;max-width:100%;image-rendering:pixelated}
-    #qrx-root .info{font-size:12px;color:#555;white-space:pre-wrap}
-    #qrx-root .big{text-align:center;font-size:16px;font-weight:bold}
-    #qrx-root #qrx-file-name{color:#0a64d8}
-    #qrx-root.qrx-full{top:0;right:0;left:0;bottom:0;width:auto;max-height:none;border-radius:0}
-    #qrx-root.qrx-full .qrx-ctl{display:none}
-    #qrx-root.qrx-full canvas#qrx-cv{max-height:calc(100vh - 80px);width:auto}
-  `; }
-  function el(html) { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; }
-  const $ = id => root.querySelector('#' + id);
+  let host = null, root = null, sFile = null, sess = null, sGrid = null, player = null;
   const fmtB = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB';
+  const $ = id => root.getElementById(id);
+
+  // 面板放在 Shadow DOM 里：所在网页的样式进不来，面板在哪个网站上都长一样
+  const CSS = `
+  @font-face{font-family:"Doto";font-weight:900;src:url(data:font/woff2;base64,/*@FONT_DOTO*/) format("woff2")}
+  :host{all:initial}
+  .p{--paper:#eceef0;--sheet:#f8f9fa;--ink:#000;--ink2:#565d66;--ink3:#8b929b;--rule:#cdd2d8;--idle:#d6dae0;--bad:#d4373c;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+    position:fixed;z-index:2147483647;top:20px;right:20px;width:420px;max-height:calc(100vh - 40px);overflow:auto;box-sizing:border-box;
+    background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:16px;box-shadow:0 18px 50px rgba(0,0,0,.25);
+    font:14px/1.6 var(--sans);-webkit-font-smoothing:antialiased;color-scheme:light}
+  @media (prefers-color-scheme:dark){ .p{--paper:#000;--sheet:#121315;--ink:#f2f4f6;--ink2:#a0a7b0;--ink3:#6c737c;--rule:#26292d;--idle:#2a2e33;--bad:#ff6369;color-scheme:dark} }
+  .p *{box-sizing:border-box;font:inherit;color:inherit}
+  [hidden]{display:none!important}
+  :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .hd{display:flex;align-items:center;gap:10px;padding:14px 14px 12px 16px;cursor:move;user-select:none}
+  .mark{position:relative;width:18px;height:18px;border:3px solid var(--ink)}
+  .mark::after{content:"";position:absolute;inset:3px;background:var(--ink)}
+  .ttl{flex:1;font:900 18px/1 "Doto",ui-monospace,monospace}
+  .ib{height:32px;min-width:32px;padding:0 10px;display:grid;place-items:center;border:1px solid var(--rule);border-radius:999px;background:var(--sheet);cursor:pointer;font-size:13px;line-height:1}
+  .bd{display:grid;gap:12px;padding:0 14px 14px}
+  .compose{display:grid;gap:12px}
+  .sheet{background:var(--sheet);border:1px solid var(--rule);border-radius:12px}
+  .sheet:focus-within{border-color:var(--ink)}
+  .p textarea:focus-visible{outline:none}
+  textarea{display:block;width:100%;height:110px;resize:vertical;padding:12px 14px 6px;border:0;background:transparent;outline:none;font:14px/1.6 var(--sans)}
+  textarea::placeholder{color:var(--ink3)}
+  .frow{display:flex;align-items:center;gap:8px;padding:6px 14px 12px}
+  .pick{position:relative;font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+  .pick input{position:absolute;width:1px;height:1px;opacity:0}
+  .fname{font-size:12px;color:var(--ink2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .x{border:0;background:none;color:var(--ink3);cursor:pointer;font-size:12px}
+  .opts{border-top:1px solid var(--rule);padding:12px 14px 14px;display:grid;gap:12px}
+  .seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .seg label{position:relative;display:grid;gap:6px;padding:10px 12px;border:1.5px solid var(--rule);border-radius:9px;cursor:pointer;background:var(--paper)}
+  .seg input{position:absolute;opacity:0;pointer-events:none}
+  .seg b{font-weight:650}
+  .seg small{font-size:12px;color:var(--ink2);line-height:1.4}
+  .seg label:has(input:checked){border-color:var(--ink)}
+  .seg label:has(input:checked)::after{content:"";position:absolute;right:10px;top:12px;width:8px;height:8px;background:var(--ink)}
+  .pal{display:flex;flex-wrap:wrap;gap:2px}
+  .pal i{width:7px;height:7px;box-shadow:inset 0 0 0 1px var(--rule)}
+  .sw{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .sw span{flex:1}
+  .sw small{display:block;font-size:12px;color:var(--ink2)}
+  .sw input{appearance:none;-webkit-appearance:none;width:40px;height:24px;margin:0;border-radius:999px;background:var(--idle);position:relative;cursor:pointer}
+  .sw input::before{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--sheet);box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .2s}
+  .sw input:checked{background:var(--ink)}
+  .sw input:checked::before{transform:translateX(16px)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 16px;border:1.5px solid var(--ink);border-radius:999px;background:transparent;font-weight:600;cursor:pointer}
+  .btn:disabled{opacity:.3;pointer-events:none}
+  .btn.solid{background:var(--ink);color:var(--paper)}
+  .btn.wide{width:100%;min-height:46px}
+  .stage{position:relative;background:#fff;border-radius:6px;padding:16px;display:flex;justify-content:center;box-shadow:0 0 0 1px var(--rule)}
+  canvas{display:block;max-width:100%;image-rendering:pixelated}
+  .bar{display:flex;align-items:center;gap:8px;margin-top:10px}
+  .idx{flex:1;font-size:13px;color:var(--ink2)}
+  .bar .btn{min-height:36px;padding:0 14px}
+  .info{margin-top:10px;font-size:13px}
+  .info small{display:block;font-size:12px;color:var(--ink3)}
+  .err{color:var(--bad);font-size:12px}
+  .err:empty{display:none}
+  /* 播放中收起输入区，码在最上面 */
+  .p.playing .compose{display:none}
+  /* 全屏：白底播放画面，只留底部控制条 */
+  .p.full{top:0;right:0;left:0!important;bottom:0;width:auto;max-height:none;border-radius:0;border:0;background:#fff;color-scheme:light}
+  .p.full .hd,.p.full .compose,.p.full .info,.p.full .idx{display:none}
+  .p.full .bd{height:100%;padding:16px 16px 80px;display:flex;flex-direction:column}
+  .p.full .out{flex:1;display:flex;flex-direction:column}
+  .p.full .stage{flex:1;align-items:center;box-shadow:none}
+  .p.full .bar{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;padding:4px;border-radius:999px;background:#000;margin:0}
+  .p.full .bar .btn{border:0;color:#fff;background:transparent}
+  `;
 
   function openPanel() {
-    if (root) { root.style.display = root.style.display === 'none' ? '' : 'none'; return; }
-    const style = document.createElement('style'); style.textContent = css(); document.head.appendChild(style);
-    root = el(`
-    <div id="qrx-root">
-      <h3><span>📤 QRStream Sender</span><span><button id="qrx-full" title="全屏">⛶</button> <button id="qrx-close">×</button></span></h3>
-      <div class="qrx-ctl">
-        <textarea id="qrx-text" placeholder="输入文本（支持换行）……&#10;或选择文件 / 在此 Ctrl+V 粘贴图片"></textarea>
-        <div class="row"><input type="file" id="qrx-file"><span id="qrx-file-name"></span><button id="qrx-clearfile">清除文件</button></div>
-        <div class="row">
-          <label>每帧字节 <input type="number" id="qrx-chunk" value="500" min="52" max="1900" step="4"></label>
-          <label>纠错 <select id="qrx-ecc"><option selected>L</option><option>M</option><option>Q</option><option>H</option></select></label>
-          <label>间隔ms <input type="number" id="qrx-ms" value="66" min="34" step="2" title="对齐屏幕刷新；摄像头 30 帧/秒时 66ms 每张都能被完整拍到一次，太短会两帧混在一张照片里"></label>
-          <label>尺寸px <input type="number" id="qrx-px" value="520" min="200" step="40"></label>
+    if (host) { const p = $('p'); p.hidden = !p.hidden; return; }
+    host = document.createElement('qrstream-sender');
+    root = host.attachShadow({ mode: 'open' });
+    root.innerHTML = `<style>${CSS}</style>
+    <div class="p" id="p">
+      <div class="hd" id="hd"><span class="mark"></span><span class="ttl">QRStream</span>
+        <button class="ib" id="qrx-edit" hidden>换内容</button><button class="ib" id="qrx-close" title="关闭（Alt+Q 再打开）" aria-label="关闭">✕</button></div>
+      <div class="bd">
+        <div class="compose">
+          <div class="sheet">
+            <textarea id="qrx-text" aria-label="要发送的内容" placeholder="输入或粘贴要发送的文字。截图可以直接粘贴。"></textarea>
+            <div class="frow"><label class="pick">选择文件<input type="file" id="qrx-file"></label><span class="fname" id="qrx-file-name"></span><button class="x" id="qrx-clearfile" hidden>移除</button></div>
+            <div class="opts">
+              <div class="seg" role="radiogroup" aria-label="码型">
+                <label><input type="radio" name="k" id="qrx-grid" checked><b>彩格码</b><span class="pal" id="palG"></span><small>最快。用 QRStream 接收</small></label>
+                <label><input type="radio" name="k" id="qrx-qr"><b>二维码</b><span class="pal" id="palQ"></span><small>旧版接收端也能读</small></label>
+              </div>
+              <label class="sw"><span>压缩<small>无损，能省 5% 以上才启用</small></span><input type="checkbox" id="qrx-z" checked></label>
+            </div>
+          </div>
+          <button class="btn solid wide" id="qrx-gen">开始播放</button>
+          <div class="err" id="qrx-err"></div>
         </div>
-        <div class="row">
-          <label><input type="checkbox" id="qrx-rgb" checked> RGB 三通道（×3）</label>
-          <label><input type="checkbox" id="qrx-z" checked> 压缩（deflate，原样无损）</label>
-        </div>
-        <div class="row">
-          <button class="primary" id="qrx-gen">生成并播放</button>
-          <button id="qrx-pause">▶ 播放</button>
-          <button id="qrx-prev">◀</button><button id="qrx-next">▶</button>
-          <button id="qrx-restart">⏮ 从头</button>
-          <label>只播帧 <input type="text" id="qrx-only" placeholder="如 3,7,10-12" style="width:110px"></label>
-          <button id="qrx-apply">应用</button>
+        <div class="out" id="qrx-out" hidden>
+          <div class="stage"><canvas id="qrx-cv" width="300" height="300"></canvas></div>
+          <div class="bar"><span class="idx" id="qrx-idx"></span><button class="btn" id="qrx-pause">暂停</button><button class="btn solid" id="qrx-full2">全屏</button></div>
+          <div class="info" id="qrx-info"></div>
         </div>
       </div>
-      <canvas id="qrx-cv" width="520" height="520"></canvas>
-      <div class="big" id="qrx-idx"></div>
-      <div class="info" id="qrx-info"></div>
-    </div>`);
-    document.body.appendChild(root);
+    </div>`;
+    document.documentElement.appendChild(host);
+    for (const [id, gl] of [['palG', [0, 85, 170, 255]], ['palQ', [0, 255]]])
+      for (const r of [0, 255]) for (const g of gl) for (const b of [0, 255]) { const i = document.createElement('i'); i.style.background = `rgb(${r},${g},${b})`; $(id).appendChild(i); }
 
     player = new QXS.Player($('qrx-cv'), {
-      size: () => root.classList.contains('qrx-full') ? Math.min(innerWidth - 20, innerHeight - 80) : (+$('qrx-px').value || 520),
-      interval: () => +$('qrx-ms').value || 66,
+      box: () => $('p').classList.contains('full') ? { w: innerWidth - 24, h: innerHeight - 110 } : { w: 390, h: 390 },
+      dpr: () => window.devicePixelRatio || 1,
+      interval: () => INTERVAL_MS,
       onShow: label => { $('qrx-idx').textContent = label; },
     });
-    const sync = () => { $('qrx-pause').textContent = player.playing ? '⏸ 暂停' : '▶ 播放'; };
-    $('qrx-close').onclick = () => { player.stop(); sync(); root.style.display = 'none'; };
-    $('qrx-full').onclick = () => { root.classList.toggle('qrx-full'); player.render(); };
+    const sync = () => { $('qrx-pause').textContent = player.playing ? '暂停' : '继续播放'; };
+    const full = on => { if (!sess) return; $('p').classList.toggle('full', on); $('qrx-full2').textContent = on ? '退出全屏' : '全屏'; requestAnimationFrame(() => player.render()); };
+    $('qrx-close').onclick = () => { player.stop(); sync(); full(false); $('p').hidden = true; };
+    $('qrx-edit').onclick = () => { const on = $('p').classList.toggle('playing'); $('qrx-edit').textContent = on ? '换内容' : '收起'; };
+    $('qrx-full2').onclick = () => full(!$('p').classList.contains('full'));
+    $('qrx-cv').ondblclick = () => full(!$('p').classList.contains('full'));
     $('qrx-file').onchange = e => setFile(e.target.files[0] || null);
     $('qrx-clearfile').onclick = () => { setFile(null); $('qrx-file').value = ''; };
     $('qrx-text').addEventListener('paste', e => {
@@ -110,52 +173,53 @@
       const f = it.getAsFile();
       setFile(new File([f], f.name && f.name !== 'image.png' ? f.name : 'pasted.' + ((f.type.split('/')[1]) || 'bin'), { type: f.type }));
     });
-    $('qrx-gen').onclick = () => generate().catch(err => { info('❌ ' + err.message); }).finally(() => { $('qrx-gen').disabled = false; sync(); });
+    $('qrx-gen').onclick = () => { $('qrx-err').textContent = ''; generate().catch(err => { $('qrx-err').textContent = err.message; }).finally(() => { $('qrx-gen').disabled = false; sync(); }); };
     $('qrx-pause').onclick = () => { if (!sess) return; player.playing ? player.stop() : player.play(); sync(); };
-    $('qrx-prev').onclick = () => { player.stop(); sync(); player.step(-1); };
-    $('qrx-next').onclick = () => { player.stop(); sync(); player.step(1); };
-    $('qrx-restart').onclick = () => { if (!sess) return; player.setOnly(null); $('qrx-only').value = ''; player.restart(); };
-    $('qrx-apply').onclick = () => { if (!sess) return; const l = QXS.parseRanges($('qrx-only').value, sess.K); player.setOnly(l.length ? l : null); };
-    $('qrx-rgb').onchange = () => { if (sess) { player.setRGB($('qrx-rgb').checked); showInfo(); } };
-    $('qrx-px').onchange = () => player.render();
-    $('qrx-cv').ondblclick = () => { root.classList.toggle('qrx-full'); player.render(); };
-    dragable(root, root.querySelector('h3'));
+    window.addEventListener('keydown', e => { if (e.key === 'Escape' && $('p').classList.contains('full')) full(false); });
+    dragable($('p'), $('hd'));
   }
 
-  function setFile(f) { sFile = f; $('qrx-file-name').textContent = f ? `📎 ${f.name}（${fmtB(f.size)}）` : ''; }
-  function info(s) { $('qrx-info').textContent = s; }
+  function setFile(f) { sFile = f; $('qrx-file-name').textContent = f ? `${f.name} · ${fmtB(f.size)}` : ''; $('qrx-clearfile').hidden = !f; }
   function showInfo() {
-    const ms = +$('qrx-ms').value || 66, per = $('qrx-rgb').checked ? 3 : 1, fps = 1000 / ms;
-    info(`会话: ${sess.sid}　类型: ${sess.meta.t}${sess.meta.z ? '(已压缩)' : ''}　原始 ${fmtB(sess.meta.len)} → 包 ${fmtB(sess.len)}
-源块 K=${sess.K}　QR v${sess.type}（固定）　纠错 ${sess.ecc}　${fps.toFixed(1)} 码/秒${per === 3 ? `（RGB ×3 = ${(fps * 3).toFixed(1)} 帧/秒）` : ''}
-接收端收到任意约 ${sess.K + 2} 帧即可还原（理想约 ${((sess.K + 2) / per / fps).toFixed(1)} 秒），漏帧无需等下一轮`);
+    const per = sGrid ? sGrid.per : 3, secs = (sess.K + 2) / per * INTERVAL_MS / 1000, el = $('qrx-info');
+    el.dataset.k = sess.K; el.dataset.per = per; el.dataset.ver = sGrid ? 'grid' : sess.type;
+    const t = secs < 60 ? `约 ${Math.max(1, Math.ceil(secs))} 秒` : `约 ${(secs / 60).toFixed(1)} 分钟`;
+    el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? '（已压缩）' : ''}，满速 ${fmtB(1000 / INTERVAL_MS * per * sess.C)}/秒，${t}传完。`
+      + `<small>接收端收到任意 ${sess.K + 2} 块就能还原。会话 ${sess.sid}</small>`;
   }
 
   function dragable(box, handle) {
     let sx, sy, ox, oy, on = false;
     handle.addEventListener('mousedown', e => {
-      if (e.target.tagName === 'BUTTON' || box.classList.contains('qrx-full')) return;
+      if (e.target.tagName === 'BUTTON' || box.classList.contains('full')) return;
       on = true; sx = e.clientX; sy = e.clientY; const r = box.getBoundingClientRect(); ox = r.left; oy = r.top; e.preventDefault();
     });
     window.addEventListener('mousemove', e => { if (!on) return;
       box.style.left = ox + e.clientX - sx + 'px'; box.style.top = oy + e.clientY - sy + 'px'; box.style.right = 'auto'; });
-    window.addEventListener('mouseup', () => on = false);
+    window.addEventListener('mouseup', () => { on = false; });
   }
 
   async function generate() {
     player.stop();
     $('qrx-gen').disabled = true;
-    info('处理中…'); await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
     const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('qrx-text').value, compress: $('qrx-z').checked });
-    const s = new QXS.SenderSession(meta, data, { chunk: +$('qrx-chunk').value || 500, ecc: $('qrx-ecc').value });
-    const ms = +$('qrx-ms').value || 66;
-    if (s.K > 3000 && !confirm(`共 ${s.K} 帧，至少约 ${(s.K * ms / 60000 / ($('qrx-rgb').checked ? 3 : 1)).toFixed(1)} 分钟。建议先压缩图片/调低质量。继续？`)) { info('已取消'); return; }
-    sess = s; $('qrx-chunk').value = s.C; $('qrx-only').value = '';
-    player.load(sess, $('qrx-rgb').checked);
+    let s, grid = null;
+    if ($('qrx-grid').checked) {
+      const L = QXG.makeLayout(QXG.profile(GRID));
+      s = new QXS.SenderSession(meta, data, { chunk: L.C, qr: false });
+      grid = new QXG.GridFramer(s, L);
+    } else s = new QXS.SenderSession(meta, data, { chunk: QR.chunk, ecc: QR.ecc });
+    const per = grid ? grid.per : 3, mins = (s.K + 2) / per * INTERVAL_MS / 60000;
+    if (mins > 3 && !confirm(`内容较大，至少需要约 ${mins.toFixed(1)} 分钟。继续？`)) return;
+    sess = s; sGrid = grid;
+    $('qrx-out').hidden = false; $('p').classList.add('playing'); $('qrx-edit').hidden = false; $('qrx-edit').textContent = '换内容';
+    player.load(sess, QR.rgb, grid);
     showInfo();
     player.play();
   }
 
-  if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('打开 QRStream Sender (Alt+Q)', openPanel);
-  window.addEventListener('keydown', e => { if (e.altKey && (e.key === 'q' || e.key === 'Q')) { e.preventDefault(); openPanel(); } });
+  if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('打开 QRStream 发送面板 (Alt+Q)', openPanel);
+  window.addEventListener('keydown', e => { if (e.altKey && (e.key === 'q' || e.key === 'Q' || e.code === 'KeyQ')) { e.preventDefault(); openPanel(); } });
 })();
+/* jshint ignore:end */

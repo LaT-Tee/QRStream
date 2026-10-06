@@ -1,7 +1,7 @@
 // 备用引擎：去掉内联 WASM，确认自动回退到 jsQR 也能完成黑白 / RGB 接收
 const fs = require('fs'), path = require('path');
 const { serve } = require('../helpers/serve');
-const { WEB, randText, captureSender, makeVideo, receive, check, finish } = require('../helpers/common');
+const { WEB, randText, captureSender, nodeFrames, makeVideo, receive, check, finish } = require('../helpers/common');
 
 (async () => {
   const srv = await serve(WEB, 8766);
@@ -10,7 +10,7 @@ const { WEB, randText, captureSender, makeVideo, receive, check, finish } = requ
   try {
     for (const rgb of [false, true]) {
       const text = randText(3000);
-      const cap = await captureSender(URL, text, { rgb });
+      const cap = rgb ? await captureSender(URL, text, { kind: 'qr' }) : await nodeFrames(text, { kind: 'qr', rgb: false, chunk: 400 });
       const r = await receive(URL, makeVideo(cap.frames, 'fb-' + rgb), {
         contextOptions: { serviceWorkers: 'block' },
         route: rt => rt.request().resourceType() === 'document' ? rt.fulfill({ body: html, contentType: 'text/html' }) : rt.continue(),

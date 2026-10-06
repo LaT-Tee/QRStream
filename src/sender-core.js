@@ -143,12 +143,7 @@
       if (this.opts.dpr) this.cv.style.width = W / dpr + 'px';
       const ctx = this.cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
       ctx.drawImage(this.small, 0, 0, W, H);
-      const seqs = this.seqsAt(p0), K = this.s.K, lab = q => q < K ? `源${q + 1}` : `冗${q - K + 1}`;
-      let label;
-      if (this.only) label = `补发 ${this.grid ? seqs.length + ' 块' : seqs.join(',')}（${(p0 * this.per) % this.only.length + 1}/${this.only.length}）`;
-      else if (this.grid) label = `彩格码 第 ${p0 + 1} 张 · 每张 ${this.per} 块（源 ${K} 块${p0 * this.per >= K ? '，已进入冗余' : ''}）`;
-      else if (this.per === 1) label = seqs[0] < K ? `源帧 ${seqs[0] + 1} / ${K}` : `冗余帧 #${seqs[0] - K + 1}`;
-      else label = `RGB：${seqs.map(lab).join(' · ')}　（源 ${K} 块）`;
+      const seqs = this.seqsAt(p0), label = this.only ? `补发 ${(p0 * this.per) % this.only.length + 1} / ${this.only.length}` : `第 ${p0 + 1} 张`;
       if (this.opts.onShow) this.opts.onShow(label, seqs);
       // 下一张提前生成，播放时不卡
       setTimeout(() => { if (this.s && this.pos === p0 && !this.imgs.has(p0 + 1)) this.imgs.set(p0 + 1, this.image(p0 + 1)); }, 0);

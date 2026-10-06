@@ -3,7 +3,7 @@
 const path = require('path'), fs = require('fs');
 const { PNG } = require('pngjs');
 const { serve } = require('../helpers/serve');
-const { randText, WEB, captureSender, makeVideo, receive, check, finish } = require('../helpers/common');
+const { randText, WEB, captureSender, nodeFrames, makeVideo, receive, check, finish } = require('../helpers/common');
 
 /** 两张 PNG（dataURL）上下拼接：分界在 cut（0..1）处，过渡带 band 内逐行线性混合 */
 function mixed(a, b, cut, band = 0.08) {
@@ -22,7 +22,8 @@ function mixed(a, b, cut, band = 0.08) {
   try {
     for (const preset of ['222:4', '242:5', '442:4', '444:5']) {
       const text = randText(preset.startsWith('44') ? 30000 : 15000);
-      const cap = await captureSender(URL, text, { kind: 'grid', preset, extra: 3 });
+      // 默认档（标准 16 色 3/4）走发送页界面；其它色阶/码率在 Node 里生成，验证接收端都能读
+      const cap = preset === '242:5' ? await captureSender(URL, text, { kind: 'grid', extra: 3 }) : await nodeFrames(text, { kind: 'grid', preset, extra: 3 });
       console.log(`\n[彩格码 ${preset}] K=${cap.K} 每张 ${cap.per} 块 张数=${cap.frames.length}  ${cap.frames[0].label}`);
       const r = await receive(URL, makeVideo(cap.frames, 'grid-' + preset.replace(':', '-')));
       console.log('  ' + r.status + '\n  ' + r.perf);
@@ -33,7 +34,7 @@ function mixed(a, b, cut, band = 0.08) {
 
     console.log('\n[混帧] 每张都是相邻两帧上下拼接（分界位置随机）');
     const text = randText(15000);
-    const cap = await captureSender(URL, text, { kind: 'grid', preset: '242:5', extra: 20 });
+    const cap = await captureSender(URL, text, { kind: 'grid', extra: 20 });
     const mix = [];
     for (let i = 0; i + 1 < cap.frames.length; i++) for (const cut of [0.3, 0.7]) mix.push({ png: mixed(cap.frames[i].png, cap.frames[i + 1].png, cut + (i % 3) * 0.05) });
     const r = await receive(URL, makeVideo(mix, 'grid-mix', { codesPerSec: 15 }));

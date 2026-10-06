@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- QRStream v1.2.0 · MIT License
+<!-- QRStream v1.3.0 · MIT License
      Bundled third-party code: zxing-wasm (MIT) wrapping zxing-cpp (Apache-2.0), jsQR (Apache-2.0),
      qrcode-generator (MIT). Full texts: THIRD_PARTY_LICENSES.txt -->
 <html lang="zh">
@@ -7,10 +7,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <title>QRStream</title>
-<meta name="description" content="离线二维码流传输：喷泉码 + RGB 三通道，发送/接收二合一">
-<meta name="theme-color" content="#0b0d12">
-<meta name="color-scheme" content="dark">
-<meta name="app-version" content="1.2.0">
+<meta name="description" content="离线屏幕传输：彩格码 / 二维码 + 喷泉码，发送/接收二合一">
+<meta name="theme-color" content="#e8ebee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0f12" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="app-version" content="1.3.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,327 +20,237 @@
 <link rel="icon" href="icon.png">
 <link rel="apple-touch-icon" href="icon.png">
 <style>
+/* 版面：取景框与白色播放屏是两个物件，其余界面退到纸面上；颜色只来自数据（码的色板、子像素 R/G/B、块状态）。
+ * 唯一的大胆处：点阵字（Doto）写的接收读数，和块拼图同源。左对齐，不切卡片，标签能省则省。
+ *   手机接收：[取景框 通栏] → [点阵读数 + 一句话状态] → [块拼图] → [开始/停止]
+ *   发送：[纸面：文本框 · 选文件 · 码型 · 压缩] [开始播放]　｜　[白色屏幕 + 裁切标记] [第 N 张  暂停 全屏] [一句话说明]
+ */
+@font-face{font-family:"Doto";font-weight:900;font-display:block;src:url(data:font/woff2;base64,d09GMgABAAAAAA/AAA4AAAABUUQAAA9iAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGhYGYD9TVEFUQACEdBEICoWKBIXANwuDHgABNgIkA4MgBCAFhGAHg3kMB1viaTErgo0DQEj+NQD+M5ITGYNZwKf+qRWJZSGSRu/BITKSM4MkOoQ9xiQhgxwSFkIdk4tZCqpdfXi8z1Xcz7UhVZDX3tzzxmJhJd/fQtj/qh/Dk7rFJ0lb4+H/9+u3z30z80XsIaLJpIk2SGLJqmmIvyGePBRobqsTWbThzX9e9gs5pZGB0mEBaeE79Pboj6FNR3Kj+fJj7Z1hG1Z1SPWmlVB0d4iGslBhl5CQiIR+NjzkHxqafiJDA/DCQoav/sR3P7OhhDIRzxFFChZaKXSmhAGp+VagpaBde1MkBVKI2Zt9A7DAzHjbcInviWO7O41VJRQUQlhv1z50mNz6GGDsfwRqdsabwxGMvM1DoR0NHvBqBTJhu5jyeKy+AY43BubDSSb8///ef2ffD01XhUqhG8M4KU06SnuU4dOGp5SyOW/R7j9U+T8KiUe4KISKJfhuTNcxCiHfXIdyzr1JV1iMwShctoOy0nsfZ5FsyIvOfWkCjYAkhBeYlNKO6Qw20qX0ALjy439b/GZYsbY+NdTXpZTVppoTwB7ABgCYfdfMPmi3Z41iITsTs4AOgPgLAXJACLUSOjFjPOZNZ1LA8W8EhNCKVQi0jTogkKIBkJChE4tAJ9a0C2AhCKtuuYaMmDJv2bot/6NjazxPX9P3LLJSVpt35v35cD42n5gvze+NGTu2vbgm12/EmFnLVm3aayk2H3upLNvckffmgzdd8sNkIkBxCYBiJlBd9W11gGrA7x/4fX4v+82vPb/6KSYL/cQ//wlRigpxBoA4EZdA3pXzeg/gDaoSp4uzCR06uesVIVO3RTcabVmDIFkwD1Yh3JwiWDT9PDCpU69Rk05ixEmQJUeeAogSLdp06NJjwJQZcxas+PMWwNUBCmtegkRJQJQqQ5Z8BQoVK1etTZ9JM1ZsO3HqzLlrvnz4cXOIINSyWTEiNaGbUiJaux4hmjEMYJcpqVVWI2nQhl+LVjIkSZEmTJE6Fao0qSmjwYQhI8Ys6SNzYsOWJwcuHAVLkShJsjzZcuTCqdSgRq1WdWK12Ldj154Lqy4pq0dlb8MRDLRhI4YwiaLg4CVAjAJ1X4GbD7i/ADAIIOENTyoplV9RrmRfeelSZ9e/mNCNgtmNr6vEyn0o/LKFude7179tdCr3HVx682PmMIKNLti+Cet95SkgdByMCaZA6I6hhAEgt5nej/DqpukIyyKSSQGANm+ps89Myppz6VzGNcd/ufnjPuFYmcvIb/19Re8XGOfY+3zS5wsDIcv+9YLxxI48YwwvJcyh1srcax0K3sfNfT/QZKD/Gd2Kv/9GBgBQMsvDvxyDNervOevv5ePCFSca6DoKF/U4FiaRbOmpVRhJP7gdnCab9WOh5+QOJOFVHCWW2JlZjWisfKydGKSpiqZVn4INX9KxImC1n2dvIAszG65GAOOefE4R/zMizoJET3o96MSPovF4A0hz2vLFGRP2P5bO8qLP+XniVUrhC/GCtOQ6zHiPis83ArTHQqIDwSA8MY2YBLBa8miK8Pjzv7ky8g5G4pJPVcFCzV+GmUxYz1H5iYgkxsP4LtuaQyNKEeDX8m9ZADAuk9E78Fe+EG8fSVWLkwmlSSTnU3X9ML08VXOkSUyuTciAWsBZNWFENPrM11AK6PnVYt6RT0pf2Ey0C6vrIX9x42s5fgDkK3n+IeZnuoLGT2Y953wvDT/z1cBRgpuiOBdZy69xIZ8J6+HRy7mmHaHFrX94FK+3c6sRJ/HgqhFJ+bWmZPDaoQNsRwkuygmndWinZ/ndvh1CX5/4pJHisy57jA9Mg2gwr6cAqFGT39P/gkBY7PnEq8dJaRWOASN/S9+ZmW4mChY83VtNT3qI9St3hW0UKM25255ZPbCdLryXT7/q+h9+furxc5R7DBYuXQVtZ6d97hgsd8biX8zHDz95eyaA3qTYVYYdNg2AJi14BayHtH287VkmI7J6IBV1IEeXW5zwk38kTcJkvZfGf+JH23vsur3Dlqql4Z1UveHN+jai+BVgqSX2JLcsmD78qjkAqJf7iYozwBQFjA8cLe/V4tMIMOmpCL9RIL9Wa3Ee6idAj82mR5v8S9N1XNwkYdjHr68VUxEoZgp9mKDJ0QrojOkXx2e9pYWf2ruDA7KDHZzSk/lRiDHEjshKz6ZLiem499DuoEXb2SxtVEzYr8TlNoBBwEEgAcf+SYJoJHLdNdDZrn/lqCz+IRZkxyiYLslkzu55F6b/J7zHGDQAbl8ki7V9RRIfHr2jy/XD5DL7Hx6MCxmyTr0Elt8Ofy3T2+rSlPtfLQXa6AUK4FjSZ+ni4NMhX2nqxt6nf+VvePIUdYfUpPVTlW/w0kPM0IP4/FINT4fc7DguXEK9btzsA5lvMpUTDeL4eL4tZpSoCKTBMc3phWf3h6LqdRiTMYagwBJ72zP4qmTfuVJdDyD/ogz0PTKe1kMBIwdet8BvZzxhzORveZEHpdLPLeevMvzra/xDPFmAgrFOkodaVEtq/nkjfPQP0y+hctcPcHDF8WoyqpuLaP/byydZscbnZP7T8iWiLxlwpgFl+x//igL+jVm/4Uu/JgLSEKjq7x8YK31bK3x7r5Zc3uHfpTmV/x5fgJvcrwMdqEGC4LiaHBPjwOP7lNhmTnhDA4raos31Xt4/aaenIPRSzPdZ6JvEXk4IoXmcTKvwzbqqF+VDJRstGr/JNNirIXvXP0v/BLhBZauvpQOW+69EQGMBlj159NX4c0WPvQL8Rd1ZE/6iV7ZmXt8IjbWvSS4pTn8QkGuE4Qkdic+89Tx1tIy9z6LGXgPfcpu+pQHpS61JOcbUg4Hp+zJqSQnFYDm1Leir6WkmHS1oaSLI3o9+AjKATZMMqsJjYB6wkSeq7DXLRQGXC8SsIZbmBHNRPaPj8eSbmPVrNlZnIDDstC3a99GH8XQoshpMuOkz+f3zNbu0VRdCGZoHqBrfWZO/6BAijQp40wKBAx3jxCc0qrbgH116jaMCkTPdaIbp2ZuQG/eQxNHibA/WB5PoBTP/6xvArULI/o3g0GrtmWP3HIfOqQhgZcEQXgF6tqHLkNzVCzBY3QEGwKOHXThpLjM+G9XrmX0IpFbVyjPCgQ5SEfmAojXC6pkL0LWxA7fzZQRS48VbwePUrh6ow2WwP3OATcVgQBVynJSV80EjyNNpLRClBOfv+sNZ6ZEH6QtIguHuGHPIgXyhY4tPRoqa53huoFm/OsUUC0CEyjOr9h1ZpxD9lxZDhi8QUrI6pG64LdICuCqLarY7CgM1MeRordAmAnn71uLOqeZ/pktYHxrULTl8q4fD6KN6i9uBW72mkFI9blqg0rSeuUiw9cdGb/5buHF3MMcHhfXyJSV9d3rgBaPGOjEBUU1LO+jVl+0o6aw/SkC/Yi+etHrMWzf1bMo8EPl6yFrR5Yp7yabNSPAmgu71+qEepbHNusHaXn/kjeAAygUzbjTuC+HKTd+DVQlA7LoRNC0AQWx2SERoCcyfzLH2Jl9+hoNVbzSQN72dsdM95tOoLcV6qYF/KMOZQOfePf/I4Sf/2DrHcQM1WGeU/+/8PREzd9n7OkNHQusnDl09/Yym28vE2mXHxJ2ZdH7qNINWMYbmwXXYREMIk/7YP4BVAxvK1+e3x6cP3VCU7gJxHQzgIHTBeUh6zWgkeIXqg2mG6oxn7DVU+0Vj9WpGgpoBngX+U0GY8VqRbHqUV9sJEspc+t4AkK87Oj818ZMer216WvEaEKGvBlATYnNpmrWjMcdUhx1zDTIccsuTt2M4fQy7g3v6LcmR5dshmgVaL4nFeGceARFDDqY3vVhWgCSCmQTH7PN2kOqd1/++4Bq1F/I3r0ZDtC/U6XVYfkBB/uJ0ZkiR4Qk3TyP5YhhzPwW0cwFiAg3VnKeAGW3AB91pLAH75MraAVw/kxH7pkztyvX//LcQjxFkYwPgFg6Bul/enG29utFMb9GQLpv6pcr/kcHELaL+WR1Y/eVv7mzST/8tzzdC6huSK+IzAVTLiNDQnX51etK5Mzqt26+AYxUARrWlOeLhtMzbPqoBV1tIOKJXYYnd8b+FCHske+5UgAQ5xkNYTmUesaoP0N5FAbMWBKPEa6zeKyg6V4KPm2THpC9XrOJvMRPQt5XvKaZKw9j1TyBhoq+C4Rt7w2p6wyHgbgbsm0HSgIZUCKoJQo0FlAU4cID6No8IlmmBHLSMGz26iqBO/rEEBaLU6XabeNBLeETYdpi1YUgfZNfz5qU1/NuerJ2qjr6oSW9b17eFiI0rzqtGFxxUCNAfBHYzAU8GRCJmzBW64UxxQcWYA93OrVJ8XJzjuAG44k6puvjeweMtPVJdb6ZfcQE3x2uGCGTjMSrMBtrbmnPGjic495PwB2SC/r+wb2Pje9dj1w/giA5BqXw8gLciFkRG7x6/fD0KUOB4qRXrbyj9AL+7uh/4T3dW/kuQVw8zBgAKTI0vjCpBNT7gR3pgFH4haUG/XuKdrVne4LfX62+WV5fc8eec1u/Ir/vY1/SQBdPr1LrjcRfnEIx8R++vM8aLift7N4ziRyzAt2B2AJDKF634yFDl3pPHtUb+fnXI/bo6afbn6sx8628u1bu6rF/v1RXD8q9utpDX1a1EmW1pw236U4J20unq0Kj597FBM1aBoSSiI6AJB8NCw6AJgqAjSUECo6JyQpAoGZ4LBA0CKr8Ug3akqais6NOHSAUjQUGQ0BBgJZcejgqmB0GBbu2OD++l+/cXhoFRUGHbeSLEkB6DX1/1t7n1h8/ixph1iytB+9DoZe9IgeO1f587fzuUgYKVw0GMGDBiQvdvnw8JgQGDvh/7ASgQOLBkNBBHdDQYCAoqiAa+9qFhaz2WLome5LyRSB/yRCwGGOXDzb8fItHv7UfUxAwUo4zQ4NF8CRiv3oUzSWYkm6VKTQp1GmDnLl35WDLlP4j5aF27ceuOLj36DBhCMTLv3gO0Jw3mGDP5L2Q+//CVhWeew3jBkhVrNj6z5QILr6aSg/rhcDnMUSI+4xC5shcvTgI7Dsq4QXxQ7BU5Ai5zV6TWOg6feEhFQUUmY8qSRZBPWF3lSZIELxWcKxljwqRde7wJ8kHDkIbOlx9/CgK88d0PG8lKx26TDFmyLcgkqkevATmClePRqFabI/y2UDKIzTPLVqxac4zbVpXeC1NKnjQpwlicFe4bca8ru0JMhFz5CuRxqhI1UWunKNFifLGpVSyRufE+TruvG9Z8V9rzKu9vVx3x6i/Ao8/JLe/Dlc+e/7zFT+P/7MctAAAA) format("woff2")}
 :root{
-  --bg:#0b0d12; --bg2:#10131a; --card:#151922; --card2:#1b202b; --line:#262c3a; --line2:#323a4c;
-  --fg:#e8ebf2; --dim:#8b93a7; --faint:#5d6579;
-  --accent:#4f8cff; --accent2:#2f6fe8; --ok:#34d399; --rec:#60a5fa; --warn:#fbbf24; --bad:#f87171;
-  --r:16px; --r-sm:10px;
-  --sat:env(safe-area-inset-top); --sab:env(safe-area-inset-bottom); --sal:env(safe-area-inset-left); --sar:env(safe-area-inset-right);
-  --appbar:52px; --tabbar:60px;
-  color-scheme:dark;
+  --paper:#eceef0; --sheet:#f8f9fa; --ink:#000; --ink2:#565d66; --ink3:#8b929b; --rule:#cdd2d8; --screen:#fff;
+  --r:#e5484d; --g:#1fa774; --b:#3e63dd; --idle:#d6dae0; --warn:#b26b00; --bad:#d4373c;
+  --dot:"Doto",ui-monospace,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","HarmonyOS Sans SC","MiSans","Noto Sans CJK SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px); --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+  color-scheme:light;
 }
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --paper:#000; --sheet:#121315; --ink:#f2f4f6; --ink2:#a0a7b0; --ink3:#6c737c; --rule:#26292d; --screen:#fff;
+  --r:#ff6369; --g:#3dd68c; --b:#7b9bff; --idle:#2a2e33; --warn:#ffb224; --bad:#ff6369; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --paper:#000; --sheet:#121315; --ink:#f2f4f6; --ink2:#a0a7b0; --ink3:#6c737c; --rule:#26292d; --screen:#fff;
+  --r:#ff6369; --g:#3dd68c; --b:#7b9bff; --idle:#2a2e33; --warn:#ffb224; --bad:#ff6369; color-scheme:dark }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{background:var(--bg)}
-body{margin:0;min-height:100dvh;background:radial-gradient(1200px 600px at 10% -10%,#16203a 0%,transparent 60%),var(--bg);color:var(--fg);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+html{background:var(--paper)}
+body{margin:0;min-height:100dvh;background:var(--paper);color:var(--ink);font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;
   -webkit-text-size-adjust:100%;overscroll-behavior-y:none}
-button,select,input,textarea{font:inherit;color:inherit}
+button,input,textarea{font:inherit;color:inherit}
 [hidden]{display:none!important}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+svg.i{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
-/* ---------- 顶栏 ---------- */
-.appbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
-  padding:calc(var(--sat) + 8px) calc(var(--sar) + 16px) 8px calc(var(--sal) + 16px);min-height:calc(var(--appbar) + var(--sat));
-  background:rgba(11,13,18,.72);backdrop-filter:saturate(160%) blur(18px);-webkit-backdrop-filter:saturate(160%) blur(18px);border-bottom:1px solid rgba(255,255,255,.06)}
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:.2px}
-.brand img{width:28px;height:28px;border-radius:8px}
-.pill{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;
-  background:var(--card);border:1px solid var(--line);cursor:pointer;white-space:nowrap}
-.pill i{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+/* 顶栏 */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:calc(var(--sat) + 12px) calc(var(--sar) + 20px) 12px calc(var(--sal) + 20px);
+  background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.brand{display:flex;align-items:center;gap:10px;font:900 21px/1 var(--dot);letter-spacing:.02em}
+.mark{position:relative;width:20px;height:20px;border:3px solid var(--ink)}
+.mark::after{content:"";position:absolute;inset:3px;background:var(--ink)}
+.net{margin-left:auto;display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:6px 2px;font-size:13px;color:var(--ink2);cursor:pointer}
+.net i{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+.net.ok i{background:var(--g)}
+.tabs{position:fixed;z-index:30;left:50%;transform:translateX(-50%);display:flex;padding:4px;border-radius:999px;background:var(--sheet);border:1px solid var(--rule)}
+.tabs button{display:flex;align-items:center;gap:8px;padding:9px 22px;border:0;border-radius:999px;background:none;color:var(--ink2);font-size:15px;font-weight:600;cursor:pointer}
+.tabs button.on{background:var(--ink);color:var(--paper)}
+@media (max-width:899px){ .tabs{bottom:calc(var(--sab) + 14px);box-shadow:0 6px 24px rgba(0,0,0,.16)} .tabs button{padding:12px 28px} }
+@media (min-width:900px){ .tabs{top:calc(var(--sat) + 9px)} }
+main{max-width:1180px;margin:0 auto;padding:8px calc(var(--sar) + 20px) calc(var(--sab) + 110px) calc(var(--sal) + 20px)}
+@media (min-width:900px){ main{padding:24px 32px 56px} }
 
-/* ---------- 底部页签（手机）/ 顶部胶囊（宽屏） ---------- */
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;justify-content:center;gap:4px;
-  padding:6px calc(var(--sar) + 12px) calc(var(--sab) + 6px) calc(var(--sal) + 12px);
-  background:rgba(15,18,25,.82);backdrop-filter:saturate(160%) blur(18px);-webkit-backdrop-filter:saturate(160%) blur(18px);border-top:1px solid rgba(255,255,255,.06)}
-.tabbar button{flex:1;max-width:220px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border:0;border-radius:12px;background:none;
-  color:var(--faint);font-size:11px;font-weight:600;cursor:pointer;transition:color .15s,background .15s}
-.tabbar button svg{width:24px;height:24px}
-.tabbar button.on{color:var(--accent)}
-main{padding:16px calc(var(--sar) + 16px) calc(var(--tabbar) + var(--sab) + 20px) calc(var(--sal) + 16px);max-width:1180px;margin:0 auto}
-@media (min-width:900px){
-  .tabbar{top:calc(var(--sat) + 8px);bottom:auto;left:50%;right:auto;transform:translateX(-50%);padding:4px;border-radius:999px;
-    border:1px solid var(--line);background:rgba(21,25,34,.9)}
-  .tabbar button{flex-direction:row;gap:6px;padding:7px 18px;font-size:14px;border-radius:999px;max-width:none}
-  .tabbar button svg{width:18px;height:18px}
-  .tabbar button.on{background:var(--accent);color:#fff}
-  main{padding-bottom:calc(var(--sab) + 32px);padding-top:24px}
-}
-
-/* ---------- 通用组件 ---------- */
-.grid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);align-items:start}
-@media (min-width:900px){ .grid{grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr)} .sticky{position:sticky;top:calc(var(--sat) + 76px)} }
-.col{display:grid;gap:16px;min-width:0}
-.card{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
-.card h2{margin:0 0 12px;font-size:13px;font-weight:700;color:var(--dim);letter-spacing:.6px;text-transform:uppercase;display:flex;align-items:center;gap:8px}
-.card h2 .sp{flex:1}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:0 16px;border-radius:12px;border:1px solid var(--line2);
-  background:var(--card2);font-weight:600;font-size:15px;cursor:pointer;transition:transform .08s,background .15s,opacity .15s;white-space:nowrap;text-decoration:none}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:999px;border:1.5px solid var(--ink);
+  background:transparent;color:var(--ink);font-weight:600;font-size:15px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:transform .08s,opacity .15s}
 .btn:active{transform:scale(.97)}
-.btn:disabled{opacity:.45;pointer-events:none}
-.btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent2));border-color:transparent;color:#fff;box-shadow:0 6px 20px -8px rgba(79,140,255,.7)}
-.btn.danger{background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.35);color:#fecaca}
-.btn.ghost{background:transparent}
-.btn.icon{width:42px;padding:0}
-.btn.block{width:100%}
-.btn svg{width:18px;height:18px}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.row.end{justify-content:flex-end}
-.spacer{flex:1}
-.field{display:flex;flex-direction:column;gap:6px;min-width:0}
-.field>span{font-size:12px;color:var(--dim);font-weight:600}
-.fields{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
-input[type=number],input[type=text],select{width:100%;min-height:40px;padding:0 12px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--bg2);outline:none}
-select{appearance:none;-webkit-appearance:none;padding-right:30px;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b93a7' stroke-width='3'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 10px center}
-input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,140,255,.18)}
-textarea{width:100%;min-height:120px;resize:vertical;padding:12px;border-radius:12px;border:1px solid var(--line2);background:var(--bg2);outline:none;
-  font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-/* 开关：直接把 checkbox 画成 iOS 风格开关（无遮挡层，可访问性好） */
-.switch{display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer;user-select:none}
-.switch .t{flex:1;display:flex;flex-direction:column}
-.switch .t small{color:var(--dim);font-size:12px}
-input.sw{appearance:none;-webkit-appearance:none;flex:none;width:46px;height:28px;margin:0;border-radius:999px;background:var(--line2);position:relative;cursor:pointer;transition:background .2s}
-input.sw::before{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.35);transition:transform .2s}
-input.sw:checked{background:var(--ok)}
-input.sw:checked::before{transform:translateX(18px)}
-.divider{height:1px;background:var(--line);margin:4px 0}
-details{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
-summary{cursor:pointer;color:var(--dim);font-size:13px;font-weight:600;padding:8px 0;list-style:none;display:flex;align-items:center;gap:6px}
-summary::-webkit-details-marker{display:none}
-summary::before{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .2s}
-details[open] summary::before{transform:rotate(45deg)}
-.muted{color:var(--dim);font-size:13px}
-.tiny{color:var(--faint);font-size:12px}
+.btn:disabled{opacity:.3;pointer-events:none}
+.btn.solid{background:var(--ink);color:var(--paper)}
+.btn.round{width:48px;padding:0}
+.btn.big{min-height:56px;font-size:16px}
 
-/* ---------- 接收 ---------- */
-.cam{padding:0;overflow:hidden}
-#wrap{position:relative;aspect-ratio:1/1;width:min(100%,70dvh,640px);margin:0 auto;background:#000;overflow:hidden}
-/* 手机：取景框让出空间，进度卡片的状态和进度条尽量和摄像头同屏 */
-@media (max-width:899px){ #wrap{width:min(100%,max(240px,calc(100dvh - var(--appbar) - var(--tabbar) - var(--sat) - var(--sab) - 330px)))} }
-/* 取景框内的进度条（手机上进度卡片在下方，这里保证扫码时一眼就能看到） */
-#hud{position:absolute;left:0;right:0;bottom:0;padding:22px 12px 10px;pointer-events:none;
-  background:linear-gradient(transparent,rgba(0,0,0,.72));color:#fff;font-size:13px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
-#hud>div:first-child{display:flex;gap:8px;align-items:baseline;font-variant-numeric:tabular-nums}
-#hudPct{font-size:20px;font-weight:800}
-#hudBar{height:6px;border-radius:999px;background:rgba(255,255,255,.25);overflow:hidden;margin-top:6px}
-#hudBar>div{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .2s}
-@media (min-width:900px){ #hud{display:none} }
+/* 接收 */
+.recv-layout{display:grid;gap:22px;grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:900px){ .recv-layout{grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr);gap:48px} .readout{position:sticky;top:96px} }
+.scanner{background:#000;margin:0 calc(-20px - var(--sar)) 0 calc(-20px - var(--sal))}
+@media (min-width:900px){ .scanner{margin:0;border-radius:8px;overflow:hidden;box-shadow:0 0 0 1px var(--rule)} }
+#wrap{position:relative;aspect-ratio:1/1;width:min(100%,70dvh,660px);max-width:100%;margin:0 auto;background:#000;overflow:hidden}
+@media (max-width:899px){ #wrap{width:min(100%,max(260px,calc(100dvh - 360px)))} }
 video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-#roi{position:absolute;inset:7%;pointer-events:none;display:none}
-#roi::before,#roi::after,#roi>i::before,#roi>i::after{content:"";position:absolute;width:34px;height:34px;border:3px solid var(--ok);filter:drop-shadow(0 0 6px rgba(52,211,153,.6))}
-#roi::before{left:0;top:0;border-right:0;border-bottom:0;border-top-left-radius:12px}
-#roi::after{right:0;top:0;border-left:0;border-bottom:0;border-top-right-radius:12px}
-#roi>i::before{left:0;bottom:0;border-right:0;border-top:0;border-bottom-left-radius:12px}
-#roi>i::after{right:0;bottom:0;border-left:0;border-top:0;border-bottom-right-radius:12px}
-#camIdle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;
-  background:radial-gradient(400px 300px at 50% 40%,#18213a,#07080c);cursor:pointer}
-#camIdle .big{width:76px;height:76px;border-radius:24px;display:grid;place-items:center;background:linear-gradient(180deg,var(--accent),var(--accent2));box-shadow:0 12px 40px -10px rgba(79,140,255,.8)}
-#camIdle .big svg{width:36px;height:36px;color:#fff}
-.camctl{display:flex;gap:8px;align-items:center;padding:12px;flex-wrap:wrap;border-top:1px solid var(--line)}
-.camctl .fields{flex:1;grid-template-columns:repeat(2,minmax(110px,1fr))}
-#zoomBox{width:100%;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim)}
-#zoomBox input{flex:1;accent-color:var(--accent)}
-#status{font-size:17px;font-weight:700;line-height:1.35;word-break:break-word}
-#pbar{height:10px;border-radius:999px;background:var(--bg2);border:1px solid var(--line);overflow:hidden;margin:12px 0 10px}
-#pbar>div{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width .2s}
-#perf{font-size:12px;color:var(--dim);min-height:18px}
-#grid{margin-top:12px}
-#grid canvas{image-rendering:pixelated;display:block;max-width:100%;border-radius:6px}
-.legend{display:flex;gap:14px;font-size:12px;color:var(--dim);margin-top:8px}
-.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-#missing{font-size:12px;color:var(--warn);word-break:break-all;margin-top:8px}
-#missing:empty{display:none}
-#missing code{color:var(--fg);background:var(--bg2);padding:1px 6px;border-radius:6px}
-#result:empty{display:none}
-#result .row{margin-bottom:12px}
-#result textarea{min-height:36dvh}
-#result img{display:block;max-width:100%;border-radius:12px;background:#fff}
-#log{font-size:12px;color:var(--faint);word-break:break-all;min-height:16px}
+.frame{position:absolute;inset:8%;pointer-events:none}
+.frame::before,.frame::after,.frame>i::before,.frame>i::after{content:"";position:absolute;width:26px;height:26px;border:2px solid #fff}
+.frame::before{left:0;top:0;border-right:0;border-bottom:0}
+.frame::after{right:0;top:0;border-left:0;border-bottom:0}
+.frame>i::before{left:0;bottom:0;border-right:0;border-top:0}
+.frame>i::after{right:0;bottom:0;border-left:0;border-top:0}
+#camIdle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:0;padding:24px;
+  background:transparent;color:#fff;cursor:pointer;text-align:center}
+#camIdle strong{font-size:19px;font-weight:650}
+#camIdle span{font-size:13px;color:rgba(255,255,255,.62)}
+.readout{display:grid;gap:18px;min-width:0}
+.pct{display:grid;gap:12px;min-width:0}
+#bigPct{font:900 88px/.85 var(--dot);padding-right:.15em}
+#status{font-size:15px;color:var(--ink2);min-width:0;word-break:break-word;text-wrap:pretty}
+#status.done{color:var(--ink);font-weight:600}
+#gcv{display:block;width:100%;max-height:230px;object-fit:contain;object-position:left top;image-rendering:pixelated}
+.key{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--ink2);margin-top:-6px}
+.key i{display:inline-block;width:9px;height:9px;margin-right:7px;vertical-align:0}
+#missing,#perf{font-size:13px;color:var(--ink3)}
+#missing:empty,#perf:empty,#log:empty{display:none}
+#log{font-size:12px;color:var(--ink3);word-break:break-all}
+.ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ctl .grow{flex:1}
+#zoomBox{flex-basis:100%;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink2)}
+#zoomBox input{flex:1;accent-color:var(--ink)}
+#resultCard{background:var(--sheet);border:1px solid var(--rule);border-radius:14px;padding:18px}
+#resultCard h2{margin:0 0 12px;font-size:15px;font-weight:650}
+#result .acts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+#result .acts .btn{min-height:42px}
+#result textarea{width:100%;min-height:32dvh;resize:vertical;padding:14px;border-radius:10px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);font:14px/1.6 var(--sans);outline:none}
+#result img{display:block;max-width:100%;border-radius:8px;background:#fff}
+.fileinfo{display:flex;align-items:center;gap:12px}
+.fileinfo .ext{width:44px;height:44px;display:grid;place-items:center;background:var(--ink);color:var(--paper);font:900 13px var(--dot)}
 
-/* ---------- 发送 ---------- */
-.drop{display:flex;align-items:center;gap:12px;padding:14px;border:1.5px dashed var(--line2);border-radius:12px;cursor:pointer;transition:border-color .15s,background .15s;margin-top:10px}
-.drop:hover,.drop.over{border-color:var(--accent);background:rgba(79,140,255,.06)}
-.drop svg{width:26px;height:26px;color:var(--accent);flex:none}
-.drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
-.chip{display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 8px 8px 12px;border-radius:12px;background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.3);font-size:13px}
-.chip span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chip .btn{min-height:30px;padding:0 10px;font-size:12px}
-#stage{background:#fff;border-radius:var(--r);padding:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:260px;position:relative}
+/* 发送 */
+.send-layout{display:grid;gap:22px;grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:900px){ .send-layout{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:48px} .stagecol{position:sticky;top:96px} }
+.compose{display:grid;gap:14px;min-width:0}
+.sheet{background:var(--sheet);border:1px solid var(--rule);border-radius:14px;transition:border-color .15s,box-shadow .15s}
+.sheet.over{border-color:var(--ink);box-shadow:0 0 0 3px color-mix(in srgb,var(--ink) 14%,transparent)}
+#sText{display:block;width:100%;min-height:180px;resize:vertical;padding:18px 18px 12px;border:0;background:transparent;outline:none;font:15px/1.65 var(--sans)}
+#sText::placeholder{color:var(--ink3)}
+.filerow{display:flex;align-items:center;gap:10px;padding:10px 18px 16px}
+.pick{position:relative;display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;cursor:pointer;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.pick input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.pick:focus-within{outline:2px solid var(--ink);outline-offset:3px}
+#sFileName{flex:1;min-width:0;font-size:13px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sClear{border:0;background:none;color:var(--ink3);font-size:13px;cursor:pointer}
+.opts{border-top:1px solid var(--rule);padding:16px 18px 18px;display:grid;gap:16px}
+.kinds{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.kinds label{position:relative;display:grid;gap:8px;padding:13px 14px;border:1.5px solid var(--rule);border-radius:10px;cursor:pointer;background:var(--paper)}
+.kinds input{position:absolute;opacity:0;pointer-events:none}
+.kinds b{font-size:15px;font-weight:650}
+.kinds small{font-size:13px;color:var(--ink2);line-height:1.45}
+.kinds label:has(input:checked){border-color:var(--ink)}
+.kinds label:has(input:checked)::after{content:"";position:absolute;right:12px;top:14px;width:9px;height:9px;background:var(--ink)}
+.kinds label:has(input:focus-visible){outline:2px solid var(--ink);outline-offset:2px}
+.pal{display:flex;flex-wrap:wrap;gap:2px}
+.pal i{width:8px;height:8px;box-shadow:inset 0 0 0 1px var(--rule)}
+.switch{display:flex;align-items:center;gap:14px;cursor:pointer;user-select:none}
+.switch span{flex:1;font-size:15px}
+.switch small{display:block;font-size:13px;color:var(--ink2)}
+input.sw{appearance:none;-webkit-appearance:none;flex:none;width:46px;height:28px;margin:0;border-radius:999px;background:var(--idle);position:relative;cursor:pointer;transition:background .2s}
+input.sw::before{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--sheet);box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .2s}
+input.sw:checked{background:var(--ink)}
+input.sw:checked::before{transform:translateX(18px)}
+#sErr{color:var(--bad);font-size:14px}
+#sErr:empty{display:none}
+
+/* 白色屏幕：四角裁切标记 */
+#stage{position:relative;background:var(--screen);border-radius:6px;padding:28px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:320px;
+  box-shadow:0 0 0 1px var(--rule)}
+#stage::before,#stage::after,#stage>.cm::before,#stage>.cm::after{content:"";position:absolute;width:14px;height:14px;border:1.5px solid #9aa1aa}
+#stage::before{left:10px;top:10px;border-right:0;border-bottom:0}
+#stage::after{right:10px;top:10px;border-left:0;border-bottom:0}
+#stage>.cm::before{left:10px;bottom:10px;border-right:0;border-top:0}
+#stage>.cm::after{right:10px;bottom:10px;border-left:0;border-top:0}
 #stageBox{width:100%;display:flex;justify-content:center}
 #sCv{display:block;max-width:100%;image-rendering:pixelated;image-rendering:crisp-edges}
-#stageEmpty{color:#8a90a0;text-align:center;font-size:14px;padding:30px 10px}
-#stageEmpty svg{width:56px;height:56px;color:#c9cfdb;display:block;margin:0 auto 10px}
-#sIdx{color:#1b2130;font-weight:700;font-size:14px;text-align:center;margin-top:8px;font-variant-numeric:tabular-nums}
-#sIdx:empty{display:none}
+#stageEmpty{color:#6c737c;text-align:center;font-size:15px;max-width:22em}
 #fsTools{display:none}
-#stage.full{position:fixed;inset:0;z-index:100;border-radius:0;min-height:0;
-  padding:calc(var(--sat) + 10px) calc(var(--sar) + 10px) calc(var(--sab) + 10px) calc(var(--sal) + 10px)}
-#stage.full #fsTools{display:flex;gap:10px;margin-top:12px}
-#stage.full #fsTools .btn{background:#eef1f6;color:#111;border-color:#d5dbe6}
-.ctlbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
-#sInfo{white-space:pre-wrap;font-size:12px;color:var(--dim);margin-top:12px;line-height:1.6}
+#stage.full{position:fixed;inset:0;z-index:100;border-radius:0;min-height:0;box-shadow:none;
+  padding:calc(var(--sat) + 16px) calc(var(--sar) + 16px) calc(var(--sab) + 80px) calc(var(--sal) + 16px)}
+#stage.full #fsTools{display:flex;gap:4px;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--sab) + 18px);padding:4px;border-radius:999px;background:#000}
+#stage.full #fsTools .btn{min-height:42px;border:0;color:#fff;font-size:14px}
+.playbar{display:flex;align-items:center;gap:10px;margin-top:14px}
+#sIdx{flex:1;font-size:14px;color:var(--ink2)}
+.playbar .btn{min-height:42px;padding:0 18px}
+#sInfo{margin:14px 0 0;font-size:15px;color:var(--ink);max-width:36em}
+#sInfo small{display:block;margin-top:4px;font-size:13px;color:var(--ink3)}
 #sInfo:empty{display:none}
-.only{display:flex;gap:8px;margin-top:12px}
-.only input{flex:1}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
 </style>
 </head>
 <body>
-<header class="appbar">
-  <div class="brand"><img src="icon.png" alt="">QRStream</div>
-  <span class="pill" id="net" role="button" title="离线状态"></span>
+<header class="top">
+  <div class="brand"><span class="mark"></span>QRStream</div>
+  <button class="net" id="net" title="离线状态"></button>
 </header>
-
-<nav class="tabbar" aria-label="页签">
-  <button id="tabRecv" class="on">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
-    <span>接收</span></button>
-  <button id="tabSend">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4M20 17v3"/></svg>
-    <span>发送</span></button>
+<nav class="tabs" aria-label="页签">
+  <button id="tabRecv" class="on">接收</button>
+  <button id="tabSend">发送</button>
 </nav>
 
 <main>
 <!-- ================= 接收 ================= -->
-<section id="recv" class="grid">
-  <div class="col">
-    <div class="card cam">
-      <div id="wrap">
-        <video id="video" playsinline muted></video>
-        <div id="roi"><i></i></div>
-        <div id="hud" hidden><div><span id="hudPct"></span><span id="hudTxt"></span></div><div id="hudBar"><div></div></div></div>
-        <div id="camIdle">
-          <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
-          <div style="font-weight:700;font-size:17px">点击开始扫描</div>
-          <div class="muted">把发送端的二维码放进取景框，占 60–90% 最佳</div>
-        </div>
-      </div>
-      <div class="camctl">
-        <button class="btn primary" id="start"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>开始扫描</button>
-        <button class="btn danger" id="stopBtn" hidden><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>停止</button>
-        <button class="btn ghost icon" id="reset" title="重置（清空进度）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
-        <div class="fields">
-          <label class="field"><span>解码尺寸</span>
-            <select id="scan">
-              <option value="480">480 · 省电</option>
-              <option value="640" selected>640 · 推荐</option>
-              <option value="800">800</option>
-              <option value="1000">1000 · 码小/远</option>
-            </select></label>
-          <label class="field"><span>模式</span>
-            <select id="rmode">
-              <option value="auto" selected>自动</option>
-              <option value="gray">黑白</option>
-              <option value="rgb">RGB ×3</option>
-            </select></label>
-        </div>
-        <label id="zoomBox" hidden>变焦 <input type="range" id="zoom" min="1" max="1" step="0.1" value="1"></label>
-      </div>
+<section id="recv" class="recv-layout">
+  <div class="scanner">
+    <div id="wrap">
+      <video id="video" playsinline muted></video>
+      <div class="frame" id="roi"><i></i></div>
+      <button id="camIdle" type="button"><strong>点按开始扫描</strong><span>让发送端的码占满四个角标</span></button>
     </div>
   </div>
 
-  <div class="col sticky">
-    <div class="card">
-      <h2>进度</h2>
-      <div id="status">未开始</div>
-      <div id="pbar"><div></div></div>
-      <div id="perf"></div>
-      <div id="grid"><canvas id="gcv" width="1" height="1"></canvas></div>
-      <div class="legend"><span><i style="background:var(--ok)"></i>源帧收到</span><span><i style="background:var(--rec)"></i>冗余帧补出</span><span><i style="background:#2a3040"></i>未收到</span></div>
-      <div id="missing"></div>
+  <div class="readout">
+    <div class="pct"><span id="bigPct" aria-label="接收进度">0%</span><div id="status">未开始</div></div>
+    <canvas id="gcv" width="1" height="1" aria-label="每个块的接收情况" hidden></canvas>
+    <div class="key" id="key" hidden><span><i style="background:var(--g)"></i>直接收到</span><span><i style="background:var(--b)"></i>冗余补出</span><span><i style="background:var(--idle)"></i>还没收到</span></div>
+    <div id="missing"></div>
+    <div class="ctl">
+      <button class="btn solid big grow" id="start">开始扫描</button>
+      <button class="btn big grow" id="stopBtn" hidden>停止</button>
+      <button class="btn round big" id="reset" title="清空进度" aria-label="清空进度"><svg class="i" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+      <label id="zoomBox" hidden>变焦 <input type="range" id="zoom" min="1" max="1" step="0.1" value="1"></label>
     </div>
-    <div class="card" id="resultCard" hidden>
-      <h2>结果</h2>
-      <div id="result"></div>
-    </div>
+    <div id="perf"></div>
+    <div id="resultCard" hidden><h2>收到的内容</h2><div id="result"></div></div>
     <div id="log"></div>
   </div>
   <canvas id="cv" hidden></canvas>
 </section>
 
 <!-- ================= 发送 ================= -->
-<section id="send" class="grid" hidden>
-  <div class="col">
-    <div class="card">
-      <h2>内容</h2>
-      <textarea id="sText" placeholder="输入要发送的文本（支持换行）&#10;也可以在这里直接粘贴截图"></textarea>
-      <label class="drop" id="drop">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
-        <div><div style="font-weight:600">选择文件</div><div class="tiny">或拖到这里 · 原样发送，不改格式</div></div>
-        <input type="file" id="sFile">
-      </label>
-      <div class="chip" id="sChip" hidden><span id="sFileName"></span><button class="btn ghost" id="sClear">移除</button></div>
-    </div>
-
-    <div class="card">
-      <h2>参数</h2>
-      <div class="fields">
-        <label class="field"><span>码型</span>
-          <select id="sKind">
-            <option value="grid" selected>彩格码 · 高速</option>
-            <option value="qr">二维码 · 兼容</option>
-          </select></label>
-        <label class="field"><span>间隔 ms（≥34）</span><input type="number" id="sMs" value="66" min="34" step="2" inputmode="numeric"></label>
+<section id="send" class="send-layout" hidden>
+  <div class="compose">
+    <div class="sheet" id="drop">
+      <label class="sr" for="sText">要发送的内容</label>
+      <textarea id="sText" placeholder="输入或粘贴要发送的文字。截图可以直接粘贴，文件可以拖进来。"></textarea>
+      <div class="filerow">
+        <label class="pick">选择文件<input type="file" id="sFile"></label>
+        <span id="sFileName"></span><button id="sClear" hidden>移除</button>
       </div>
-      <div id="gOpts" class="fields" style="margin-top:12px">
-        <label class="field"><span>档位</span>
-          <select id="gLv">
-            <option value="222:4">稳 · 8 色</option>
-            <option value="242:5" selected>标准 · 16 色</option>
-            <option value="442:4">快 · 32 色</option>
-            <option value="444:5">极速 · 64 色，光线好、手稳</option>
-          </select></label>
-        <label class="field"><span>格子</span>
-          <select id="gLong">
-            <option value="73">大 · 73 格，远/糊也能读</option>
-            <option value="85" selected>中 · 85 格 · 推荐</option>
-            <option value="97">小 · 97 格，需靠近</option>
-          </select></label>
-      </div>
-      <div id="qOpts">
-        <div class="fields" style="margin-top:12px">
-          <label class="field"><span>每帧字节</span><input type="number" id="sChunk" value="500" min="52" max="1900" step="4" inputmode="numeric"></label>
+      <div class="opts">
+        <div class="kinds" role="radiogroup" aria-label="码型">
+          <label><input type="radio" name="kind" id="kGrid" value="grid" checked><b>彩格码</b><span class="pal" id="palGrid"></span><small>最快。用本应用接收</small></label>
+          <label><input type="radio" name="kind" id="kQr" value="qr"><b>二维码</b><span class="pal" id="palQr"></span><small>旧版和油猴接收端也能读</small></label>
         </div>
-        <label class="switch"><span class="t">RGB 三通道 <small>一张图同时传 3 帧，吞吐 ×3</small></span><input type="checkbox" class="sw" id="sRgb" checked></label>
+        <label class="switch"><span>压缩<small>无损，能省 5% 以上才启用</small></span><input type="checkbox" class="sw" id="sZ" checked></label>
       </div>
-      <div class="divider"></div>
-      <label class="switch"><span class="t">压缩 <small>deflate 无损压缩，省 5% 以上才采用</small></span><input type="checkbox" class="sw" id="sZ" checked></label>
-      <details>
-        <summary>高级</summary>
-        <div class="fields" style="padding:6px 0 4px">
-          <label class="field qOnly"><span>纠错等级</span><select id="sEcc"><option selected>L</option><option>M</option><option>Q</option><option>H</option></select></label>
-          <label class="field qOnly"><span>二维码尺寸 px（0=自动）</span><input type="number" id="sPx" value="0" min="0" step="40" inputmode="numeric"></label>
-        </div>
-        <div class="tiny">换帧间隔会对齐到屏幕刷新（60Hz 下 66ms = 4 次刷新）。摄像头 30 帧/秒时，66ms 每张都能被完整拍到一次；间隔太短会两帧混在一张照片里。</div>
-      </details>
-      <button class="btn primary block" id="sGen" style="margin-top:12px;min-height:48px">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>生成并播放</button>
     </div>
+    <button class="btn solid big" id="sGen">开始播放</button>
+    <div id="sErr"></div>
   </div>
 
-  <div class="col sticky">
-    <div class="card">
-      <h2>播放<span class="sp"></span><span class="tiny" style="text-transform:none;letter-spacing:0">双击二维码可全屏</span></h2>
-      <div id="stage">
-        <div id="stageEmpty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 20h1M17 20h1"/></svg>生成后在这里播放二维码</div>
-        <div id="stageBox" hidden><canvas id="sCv" width="300" height="300"></canvas></div>
-        <div id="sIdx"></div>
-        <div id="fsTools"><button class="btn" id="fsPlay">⏯ 播放/暂停</button><button class="btn" id="fsExit">退出全屏</button></div>
-      </div>
-      <div class="ctlbar">
-        <button class="btn" id="sPlay" disabled>▶ 播放</button>
-        <button class="btn icon" id="sPrev" title="上一帧" disabled>◀</button>
-        <button class="btn icon" id="sNext" title="下一帧" disabled>▶</button>
-        <button class="btn icon" id="sRestart" title="从第一个源帧重播" disabled>⏮</button>
-        <span class="spacer"></span>
-        <button class="btn" id="sFull" disabled>⛶ 全屏</button>
-      </div>
-      <div class="only">
-        <input type="text" id="sOnly" placeholder="只播帧，如 3,7,10-12（接收端会提示）">
-        <button class="btn" id="sApply">应用</button>
-      </div>
-      <div id="sInfo" class="mono"></div>
+  <div class="stagecol">
+    <div id="stage">
+      <span class="cm"></span>
+      <div id="stageEmpty">写好内容后点「开始播放」，码会在这里循环播放。手机打开本应用的接收页对准它就行。</div>
+      <div id="stageBox" hidden><canvas id="sCv" width="300" height="300"></canvas></div>
+      <div id="fsTools"><button class="btn" id="fsPlay">暂停</button><button class="btn" id="fsExit">退出全屏</button></div>
     </div>
+    <div class="playbar"><span id="sIdx"></span>
+      <button class="btn" id="sPlay" disabled>暂停</button>
+      <button class="btn solid" id="sFull" disabled>全屏播放</button>
+    </div>
+    <div id="sInfo"></div>
   </div>
 </section>
 </main>
@@ -5234,12 +5145,7 @@ var qrcode = function() {
       if (this.opts.dpr) this.cv.style.width = W / dpr + 'px';
       const ctx = this.cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
       ctx.drawImage(this.small, 0, 0, W, H);
-      const seqs = this.seqsAt(p0), K = this.s.K, lab = q => q < K ? `源${q + 1}` : `冗${q - K + 1}`;
-      let label;
-      if (this.only) label = `补发 ${this.grid ? seqs.length + ' 块' : seqs.join(',')}（${(p0 * this.per) % this.only.length + 1}/${this.only.length}）`;
-      else if (this.grid) label = `彩格码 第 ${p0 + 1} 张 · 每张 ${this.per} 块（源 ${K} 块${p0 * this.per >= K ? '，已进入冗余' : ''}）`;
-      else if (this.per === 1) label = seqs[0] < K ? `源帧 ${seqs[0] + 1} / ${K}` : `冗余帧 #${seqs[0] - K + 1}`;
-      else label = `RGB：${seqs.map(lab).join(' · ')}　（源 ${K} 块）`;
+      const seqs = this.seqsAt(p0), label = this.only ? `补发 ${(p0 * this.per) % this.only.length + 1} / ${this.only.length}` : `第 ${p0 + 1} 张`;
       if (this.opts.onShow) this.opts.onShow(label, seqs);
       // 下一张提前生成，播放时不卡
       setTimeout(() => { if (this.s && this.pos === p0 && !this.imgs.has(p0 + 1)) this.imgs.set(p0 + 1, this.image(p0 + 1)); }, 0);
@@ -5289,6 +5195,12 @@ const $ = id => document.getElementById(id);
 const store = { get(k, d) { try { const v = localStorage.getItem('qrs1.' + k); return v == null ? d : v; } catch { return d; } },
                 set(k, v) { try { localStorage.setItem('qrs1.' + k, v); } catch {} } };
 
+/* 固定参数（仿真选出的最优值，见 docs/SIMULATION.md）：不再让用户调 */
+const INTERVAL_MS = 66;                                                      // 60Hz 下 4 次刷新；30fps 摄像头每张都能完整拍到一次
+const GRID = { long: 85, levels: [2, 4, 2], rate: 5, tile: 24 };             // 彩格码：85 格、16 色、LDPC 码率 3/4
+const QR = { chunk: 500, ecc: 'L', rgb: true };                              // 二维码：RGB 三通道，每帧 500 字节，纠错 L
+const SCAN_OUT = 640;                                                        // 二维码识别时取景框缩到的边长
+
 /* ================= 页签 / 离线状态 ================= */
 function showTab(t) {
   $('recv').hidden = t !== 'recv'; $('send').hidden = t !== 'send';
@@ -5304,16 +5216,15 @@ const isFile = location.protocol === 'file:';  // 双击打开的本地文件：
 let offlineReady = isFile;
 const netUI = () => {
   const n = $('net'), sw = 'serviceWorker' in navigator;
-  const txt = (navigator.onLine ? '' : '离线 · ') + (isFile ? '本地文件' : !sw ? '在线' : offlineReady ? '可离线' : '缓存中…');
-  n.innerHTML = '<i></i>' + txt;
-  n.style.color = offlineReady ? 'var(--ok)' : 'var(--warn)';
+  n.innerHTML = '<i></i>' + (isFile ? '本地文件' : !sw ? '在线' : offlineReady ? '离线可用' : '缓存中…');
+  n.classList.toggle('ok', offlineReady);
 };
 addEventListener('online', netUI); addEventListener('offline', netUI);
 $('net').onclick = () => alert(isFile
   ? '正在以本地文件方式运行，所有代码已内联在 index.html 中，断网也能用。'
   : offlineReady
   ? '已缓存到本机，断网/飞行模式下也能打开。\n（iPhone：从主屏幕图标打开的 App 和 Safari 是分开缓存的，两边各需要在线打开一次）'
-  : '还没缓存完成：请保持联网，停留在本页几秒，直到右上角变成「可离线」。');
+  : '还没缓存完成：请保持联网，停留在本页几秒，直到右上角变成「离线可用」。');
 if ('serviceWorker' in navigator && !isFile) {
   navigator.serviceWorker.addEventListener('message', e => { if (e.data && 'offlineReady' in e.data) { offlineReady = !!e.data.offlineReady; netUI(); } });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
@@ -5341,11 +5252,12 @@ const blobWorker = id => new Worker(URL.createObjectURL(new Blob([$(id).textCont
 const video = $('video'), cv = $('cv'), ctx = cv.getContext('2d', { willReadFrequently: true });
 let scanW = null, decW = null, engine = '', stream = null, running = false, busy = false, fresh = false, lastRaw = '';
 let S = null;   // 主线程只保存显示用的会话信息
-function setStatus(s) { $('status').textContent = s; }
+function setStatus(s, done) { $('status').textContent = s; $('status').classList.toggle('done', !!done); }
+function setPct(p) { $('bigPct').textContent = Math.floor(p) + '%'; }
 function log(s) { $('log').textContent = s; }
 function syncScanUI() {
   $('start').hidden = running; $('stopBtn').hidden = !running;
-  $('camIdle').hidden = running; $('roi').style.display = running ? 'block' : 'none';
+  $('camIdle').hidden = running;
 }
 
 function getWorkers() {
@@ -5364,32 +5276,26 @@ function getWorkers() {
   })();
 }
 
-// 进度格子
-// 冗余帧覆盖约一半源块，增量消元时很少能单独解出某一块，大多在收齐（rank=K）那一刻一起解出，所以蓝格主要在完成时出现
-const GCOLS = 50, C_IDLE = '#2a3040', C_SRC = '#34d399', C_REC = '#60a5fa';
-let cells = null;   // 每格：0 未确定 / 1 源帧收到 / 2 冗余帧补出
-function drawCell(i, color) { const c = $('gcv').getContext('2d'); c.fillStyle = color; c.fillRect((i % GCOLS) * 4, Math.floor(i / GCOLS) * 4, 3, 3); }
+// 进度格子：每格一个源块。冗余帧大多在收齐（rank=K）那一刻一起解出，所以「冗余补出」主要在完成时出现
+const GCOLS = 50, tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let C_IDLE = '#d3d8de', C_SRC = '#1fa774', C_REC = '#3e63dd';
+let cells = null;   // 每格：0 未确定 / 1 直接收到 / 2 冗余补出
+function drawCell(i, color) { const c = $('gcv').getContext('2d'); c.fillStyle = color; c.fillRect((i % GCOLS) * 7, Math.floor(i / GCOLS) * 7, 6, 6); }
 function setCell(i, how) { if (!cells || cells[i]) return; cells[i] = how; drawCell(i, how === 1 ? C_SRC : C_REC); }
 function initGrid(K) {
-  const g = $('gcv'); g.width = GCOLS * 4; g.height = Math.ceil(K / GCOLS) * 4;
-  g.style.width = '100%'; g.style.height = 'auto'; g.style.maxHeight = '160px'; g.style.objectFit = 'contain'; g.style.objectPosition = 'left top';
+  C_IDLE = tok('--idle') || C_IDLE; C_SRC = tok('--ok') || C_SRC; C_REC = tok('--rec') || C_REC;
+  const g = $('gcv'); g.width = GCOLS * 7 - 1; g.height = Math.ceil(K / GCOLS) * 7 - 1; g.hidden = false; $('key').hidden = false;
   cells = new Uint8Array(K);
   for (let i = 0; i < K; i++) drawCell(i, C_IDLE);
-}
-function setHud(pct, txt) {
-  $('hud').hidden = pct == null;
-  if (pct == null) return;
-  $('hudPct').textContent = pct.toFixed(0) + '%'; $('hudTxt').textContent = txt;
-  $('hudBar').firstElementChild.style.width = pct + '%';
 }
 function setResultVisible(v) { $('resultCard').hidden = !v; }
 
 function resetSession() {
-  S = null; ui = null; cells = null; lastRaw = ''; $('missing').textContent = ''; $('result').innerHTML = ''; setResultVisible(false); setHud(null);
-  const g = $('gcv'); g.width = 1; g.height = 1;
-  $('pbar').firstElementChild.style.width = '0';
+  S = null; ui = null; cells = null; lastRaw = ''; $('missing').textContent = ''; $('result').innerHTML = ''; setResultVisible(false);
+  const g = $('gcv'); g.width = 1; g.height = 1; g.hidden = true; $('key').hidden = true;
+  setPct(0);
   getWorkers(); decW.postMessage({ cmd: 'reset' }); scanW.postMessage({ reset: true });
-  setStatus(running ? '扫描中… 等待第一帧' : '未开始');
+  setStatus(running ? '正在找码…' : '未开始');
 }
 
 let ui = null, uiPending = false;
@@ -5397,14 +5303,12 @@ function scheduleUI() {
   if (uiPending) return; uiPending = true;
   requestAnimationFrame(() => {
     uiPending = false; if (!S || S.done || !ui) return;
-    const pct = ui.rank / S.K * 100;
-    $('pbar').firstElementChild.style.width = pct + '%';
-    const need = S.K - ui.rank, pending = ui.rank - ui.known;
-    setStatus(`会话 ${S.sid}：${ui.rank} / ${S.K}（${pct.toFixed(0)}%）　还差约 ${need + 2} 帧（任意帧都行）`);
-    setHud(pct, `${ui.rank} / ${S.K} · 还差约 ${need + 2} 帧`);
-    const hint = pending ? `（其中 ${pending} 块已被冗余帧抵上，收齐后一起解出、显示为蓝色）` : '';
-    $('missing').innerHTML = ui.missing
-      ? `灰格 ${S.K - ui.known} 块${hint}：<code>${ui.missing}</code>　发送端继续播放即可；想更快可填进发送端「只播帧」` : '';
+    const pct = ui.rank / S.K * 100, need = S.K - ui.rank;
+    setPct(pct);
+    setStatus(`已收 ${ui.rank} / ${S.K} 块，还差约 ${need + 2} 块。保持对准即可。`);
+   
+    const pending = ui.rank - ui.known;
+    $('missing').textContent = pending > 0 ? `灰色里有 ${pending} 块已被冗余数据抵上，收齐时一起解出。` : '';
   });
 }
 
@@ -5413,9 +5317,9 @@ function onDec(e) {
   switch (m.type) {
     case 'session':
       S = { sid: m.sid, K: m.K, len: m.len, done: false, t0: performance.now() };
-      $('result').innerHTML = ''; setResultVisible(false); initGrid(m.K); setHud(0, `0 / ${m.K}`);
-      log(`检测到会话 ${m.sid}：${m.K} 个源块 × ${m.C} 字节${m.v === 3 ? '（v3 旧协议）' : m.v === 5 ? '（彩格码）' : ''}`);
-      setStatus(`会话 ${m.sid}：0 / ${m.K}`);
+      $('result').innerHTML = ''; setResultVisible(false); initGrid(m.K); setPct(0);
+      log(`会话 ${m.sid}，${m.v === 5 ? '彩格码' : m.v === 3 ? '二维码（v3 旧协议）' : '二维码'}，${m.K} 块，每块 ${m.C} 字节`);
+      setStatus(`找到了，共 ${m.K} 块。`);
       break;
     case 'progress':
       ui = m;
@@ -5423,21 +5327,20 @@ function onDec(e) {
       scheduleUI();
       break;
     case 'solving':
-      setStatus(`已收齐，正在还原… ${(m.pct * 100).toFixed(0)}%`); setHud(100, `已收齐，还原中 ${(m.pct * 100).toFixed(0)}%`);
-      $('pbar').firstElementChild.style.width = '100%';
+      setStatus(`已收齐，正在还原（${(m.pct * 100).toFixed(0)}%）。`); setPct(100);
       break;
     case 'done':
       if (S) S.done = true;
       stopScan();
-      if (cells) for (let i = 0; i < m.K; i++) setCell(i, 2);   // 剩下的块都是收齐后由冗余帧消元解出的
-      $('missing').textContent = ''; setHud(100, '✅ 完成');
-      setStatus(`✅ 完成：${m.meta.t === 'text' ? '文本' : m.meta.name}（${fmtB(m.meta.len)}，用时 ${m.secs.toFixed(1)} 秒，收 ${m.received} 帧 / 需 ${m.K}）`);
+      if (cells) for (let i = 0; i < m.K; i++) setCell(i, 2);   // 剩下的块都是收齐后由冗余数据消元解出的
+      $('missing').textContent = ''; setPct(100);
+      setStatus(`✅ 收好了：${m.meta.t === 'text' ? '一段文字' : m.meta.name}，${fmtB(m.meta.len)}，用时 ${m.secs.toFixed(1)} 秒（收了 ${m.received} 块，最少要 ${m.K} 块）。`, true);
       if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
       showResult(m.meta, new Uint8Array(m.data));
       break;
-    case 'fail': if (S) S.done = true; stopScan(); setStatus('❌ ' + m.msg); setHud(null); break;
+    case 'fail': if (S) S.done = true; stopScan(); setStatus('❌ ' + m.msg); break;
     case 'log': log(m.msg); break;
-    case 'foreign': log('非本协议二维码：' + m.text); break;
+    case 'foreign': log('不是本应用的码：' + m.text); break;
     case 'reset': log('已清空（含本机保存的续传进度）'); break;
   }
 }
@@ -5447,43 +5350,45 @@ const mkBtn = (html, cls = 'btn') => { const b = document.createElement('button'
 function showResult(meta, data) {
   const r = $('result'); r.innerHTML = ''; setResultVisible(true);
   const blob = new Blob([data], { type: meta.mime }), url = URL.createObjectURL(blob);
-  const row = document.createElement('div'); row.className = 'row';
-  const dl = document.createElement('a'); dl.href = url; dl.download = meta.name; dl.className = 'btn'; dl.textContent = '💾 下载 / 保存';
-  row.appendChild(dl);
+  const acts = document.createElement('div'); acts.className = 'acts';
+  const dl = document.createElement('a'); dl.href = url; dl.download = meta.name; dl.className = 'btn'; dl.textContent = '下载';
+  acts.appendChild(dl);
   const file = new File([blob], meta.name, { type: meta.mime });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    const sh = mkBtn('📤 分享 / 存到文件');
+    const sh = mkBtn('分享 / 存到文件');
     sh.onclick = () => navigator.share({ files: [file], title: meta.name }).catch(() => {});
-    row.appendChild(sh);
+    acts.appendChild(sh);
   }
-  r.appendChild(row);
+  r.appendChild(acts);
   if (meta.t === 'text') {
     const ta = document.createElement('textarea'); ta.value = new TextDecoder().decode(data);
-    const cp = mkBtn('📋 复制', 'btn primary');
-    cp.onclick = async () => { try { await navigator.clipboard.writeText(ta.value); } catch { ta.select(); document.execCommand('copy'); } cp.textContent = '✅ 已复制'; };
-    row.prepend(cp); r.appendChild(ta);
+    const cp = mkBtn('复制文本', 'btn primary');
+    cp.onclick = async () => { try { await navigator.clipboard.writeText(ta.value); } catch { ta.select(); document.execCommand('copy'); } cp.textContent = '已复制 ✓'; };
+    acts.prepend(cp); r.appendChild(ta);
   } else if (meta.mime.startsWith('image/')) {
     const img = document.createElement('img'); img.src = url; r.appendChild(img);
-    const tip = document.createElement('div'); tip.className = 'tiny'; tip.style.marginTop = '8px';
+    const tip = document.createElement('div'); tip.className = 'tiny'; tip.style.marginTop = '10px';
     tip.textContent = 'iPhone 可长按图片 →「添加到照片」'; r.appendChild(tip);
   } else {
-    const tip = document.createElement('div'); tip.className = 'muted';
-    tip.textContent = `${meta.name} · ${fmtB(meta.len)} · ${meta.mime}`; r.appendChild(tip);
+    const fi = document.createElement('div'); fi.className = 'fileinfo';
+    const ext = (meta.name.split('.').pop() || 'bin').slice(0, 4).toUpperCase();
+    fi.innerHTML = `<span class="ext"></span><div><div style="font-weight:600"></div><div class="tiny"></div></div>`;
+    fi.querySelector('.ext').textContent = ext;
+    fi.querySelector('div>div').textContent = meta.name;
+    fi.querySelector('.tiny').textContent = `${fmtB(meta.len)} · ${meta.mime}`;
+    r.appendChild(fi);
   }
   if (innerWidth < 900) $('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-/* ---------- 摄像头：只用后置，不枚举/不切换（贴近时 iPhone 会自动切微距） ---------- */
+/* ---------- 摄像头：后置、1080p（每格像素多，离远一点也能读；见仿真报告） ---------- */
 async function startScan() {
   if (!window.isSecureContext) { setStatus('❌ 必须用 HTTPS（或 localhost）打开本页才能使用摄像头'); return; }
   stopScan();
   getWorkers();
-  const big = +$('scan').value > 720;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: big ? 1920 : 1280 }, height: { ideal: big ? 1080 : 720 },
-      frameRate: { ideal: 30, max: 30 } } });
+      facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } } });
   } catch (e) { setStatus('❌ 无法打开摄像头：' + e.message); return; }
   video.srcObject = stream; await video.play();
   const track = stream.getVideoTracks()[0];
@@ -5496,7 +5401,7 @@ async function startScan() {
     }
   } catch {}
   running = true; fresh = true; keepAwake(true); syncScanUI();
-  if (!S || S.done) setStatus('扫描中… 等待第一帧' + (engine ? `（${engine}）` : '（识别引擎加载中）'));
+  if (!S || S.done) setStatus(engine ? '正在找码…' : '正在加载识别引擎…');
   nextVideoFrame();
 }
 function stopScan() {
@@ -5513,7 +5418,7 @@ function nextVideoFrame() {
 }
 function onVideoFrame() { fresh = true; pump(); nextVideoFrame(); }
 
-// 整幅画面送去识别：彩格码用整幅；二维码在识别线程里取中央正方形（= 取景框）并缩到「解码尺寸」
+// 整幅画面送去识别：彩格码用整幅；二维码在识别线程里取中央正方形（= 取景框）
 function pump() {
   if (!running || busy || !fresh || !engine || document.hidden || video.readyState < 2) return;
   fresh = false;
@@ -5522,33 +5427,31 @@ function pump() {
   ctx.drawImage(video, 0, 0, w, h);
   const img = ctx.getImageData(0, 0, w, h);
   busy = true; perf.n++;
-  scanW.postMessage({ buf: img.data.buffer, w, h, mode: $('rmode').value, out: +$('scan').value || 640 }, [img.data.buffer]);
+  scanW.postMessage({ buf: img.data.buffer, w, h, mode: 'auto', out: SCAN_OUT }, [img.data.buffer]);
 }
-const perf = { n: 0, ok: 0, ms: 0, rgb: 0, gOk: 0, gOf: 0, t: performance.now() };
+const perf = { n: 0, ok: 0, ms: 0, gOk: 0, gOf: 0, t: performance.now() };
 function onScan(e) {
   const d = e.data;
   if (d.ready) {
     engine = d.ready; document.body.dataset.engine = engine;
-    if (running && (!S || S.done)) setStatus(`扫描中… 等待第一帧（${engine}）`);
+    if (running && (!S || S.done)) setStatus('正在找码…');
     pump(); return;
   }
   busy = false; perf.ms += d.ms;
   if (d.texts.length) {
-    perf.ok += d.texts.length; if (d.via === 'rgb') perf.rgb++;
+    perf.ok += d.texts.length;
     const nt = d.texts.filter(t => t !== lastRaw);
     if (nt.length) { lastRaw = nt[nt.length - 1]; decW.postMessage({ texts: nt }); }
   }
-  if (d.grid) { perf.gOk += d.grid.ok; perf.gOf += d.grid.of; perf.gLv = d.grid.lv; if (d.frames.length) decW.postMessage({ frames: d.frames }); }
+  if (d.grid) { perf.gOk += d.grid.ok; perf.gOf += d.grid.of; if (d.frames.length) decW.postMessage({ frames: d.frames }); }
   const now = performance.now();
   if (now - perf.t > 1000) {
-    const s = (now - perf.t) / 1000, avgMs = (perf.ms / Math.max(1, perf.n)).toFixed(1);
-    const gr = perf.gOf ? perf.gOk / perf.gOf : 0;
-    const tip = !perf.gOf ? '' : gr < 0.6 ? '　· 块成功率低：靠近些/拿稳，或发送端换更稳的档位、更大的格子'
-      : gr > 0.97 && perf.gLv !== '444:5' ? '　· 很稳，发送端可以试更快的档位' : '';
-    $('perf').textContent = perf.gOf
-      ? `彩格码 · 解码 ${(perf.n / s).toFixed(1)} 次/秒 · 块 ${perf.gOk}/${perf.gOf}（${(gr * 100).toFixed(0)}%） · ${avgMs} ms/次${tip}`
-      : `${engine} · 解码 ${(perf.n / s).toFixed(1)} 次/秒 · 识别 ${(perf.ok / s).toFixed(1)} 码/秒${perf.rgb ? '（RGB）' : ''} · ${avgMs} ms/次`;
-    perf.n = perf.ok = perf.ms = perf.rgb = perf.gOk = perf.gOf = 0; perf.t = now;
+    const s = (now - perf.t) / 1000, gr = perf.gOf ? perf.gOk / perf.gOf : 0;
+    const tip = perf.gOf && gr < 0.6 ? '识别率偏低，靠近一些、拿稳、避开反光。' : '';
+    $('perf').textContent = !running ? '' : perf.gOf
+      ? `每秒看 ${(perf.n / s).toFixed(0)} 帧，块识别率 ${(gr * 100).toFixed(0)}%。${tip}`
+      : `每秒看 ${(perf.n / s).toFixed(0)} 帧，识别出 ${(perf.ok / s).toFixed(1)} 个二维码（${engine}）。`;
+    perf.n = perf.ok = perf.ms = perf.gOk = perf.gOf = 0; perf.t = now;
   }
   pump();
 }
@@ -5557,42 +5460,32 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { pu
 let rzT = 0; addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(fitSender, 80); });
 $('start').onclick = startScan;
 $('camIdle').onclick = startScan;
-$('stopBtn').onclick = () => { stopScan(); setStatus('已停止' + (S && ui && !S.done ? `（已收 ${ui.rank}/${S.K}，进度已保存在本机，可继续）` : '')); };
+$('stopBtn').onclick = () => { stopScan(); $('perf').textContent = ''; setStatus('已停止' + (S && ui && !S.done ? `（已收 ${ui.rank}/${S.K}，进度已保存在本机，可继续）` : '')); };
 $('reset').onclick = resetSession;
-$('scan').onchange = () => { store.set('scan', $('scan').value); if (running) startScan(); };
-$('rmode').onchange = () => store.set('rmode', $('rmode').value);
-$('scan').value = store.get('scan', '640'); $('rmode').value = store.get('rmode', 'auto');
 
 /* ================= 发送端 ================= */
-const GRID_TILE = 24;   // 彩格码分块边长（格），见 test/sim 仿真
 const QXS = window.QXS, QXG = window.QXG;
 let sFile = null, sess = null, sGrid = null;   // sGrid：彩格码 GridFramer（二维码模式为 null）
 const player = new QXS.Player($('sCv'), {
   box: () => senderBox(),
   dpr: () => window.devicePixelRatio || 1,
-  interval: () => Math.max(34, +$('sMs').value || 66),
+  interval: () => INTERVAL_MS,
   onShow: label => { $('sIdx').textContent = label; },
 });
-/** 二维码/彩格码可用的显示区域（CSS 像素） */
+/** 码可用的显示区域（CSS 像素） */
 function senderBox() {
-  const want = +$('sPx').value;
-  if (want > 0 && !sGrid) return { w: want, h: want };
   const st = $('stage'), full = st.classList.contains('full');
   const cs = getComputedStyle(st), padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight), padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
   const w = st.clientWidth - padX;
-  const h = full ? innerHeight - padY - 90 : innerHeight * 0.72;
+  const h = full ? innerHeight - padY - 110 : innerHeight * 0.7;
   return { w: Math.max(160, Math.floor(w)), h: Math.max(160, Math.floor(h)) };
 }
-function syncKindUI() {
-  const grid = $('sKind').value === 'grid';
-  $('gOpts').hidden = !grid; $('qOpts').hidden = grid;
-  for (const el of document.querySelectorAll('.qOnly')) el.hidden = grid;
-}
+const kind = () => $('kQr').checked ? 'qr' : 'grid';
 function fitSender() { if (sess && !$('send').hidden) player.render(); }
-function syncPlayBtn() { $('sPlay').textContent = player.playing ? '⏸ 暂停' : '▶ 播放'; }
+function syncPlayBtn() { const t = player.playing ? '暂停' : '继续播放'; $('sPlay').textContent = t; $('fsPlay').textContent = t; }
 function setSFile(f) {
-  sFile = f; $('sChip').hidden = !f;
-  $('sFileName').textContent = f ? `📎 ${f.name} · ${fmtB(f.size)}` : '';
+  sFile = f; $('sClear').hidden = !f;
+  $('sFileName').textContent = f ? `${f.name}（${fmtB(f.size)}）` : '';
 }
 $('sFile').onchange = e => setSFile(e.target.files[0] || null);
 $('sClear').onclick = e => { e.preventDefault(); setSFile(null); $('sFile').value = ''; };
@@ -5608,72 +5501,68 @@ for (const el of [$('drop'), $('sText')]) {
   el.addEventListener('dragleave', () => $('drop').classList.remove('over'));
   el.addEventListener('drop', e => { e.preventDefault(); $('drop').classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) setSFile(f); });
 }
-// sMs 用新键：旧版默认 50ms 会混帧，升级后改用 66ms
-for (const [id, key] of [['sChunk'], ['sMs', 'sMs.v2'], ['sEcc'], ['sPx'], ['sKind'], ['gLv'], ['gLong']].map(([i, k]) => [i, k || i])) {
-  const el = $(id), v = store.get(key, el.value);
-  if ([...(el.options || [{ value: v }])].some(o => o.value === v)) el.value = v;
-  el.addEventListener('change', () => store.set(key, el.value));
+// 码型选项下展示这种码实际用到的颜色：彩格码 R×G×B = 2×4×2 = 16 色，二维码 RGB 三通道 = 8 色
+for (const [id, gl] of [['palGrid', [0, 85, 170, 255]], ['palQr', [0, 255]]]) {
+  const el = $(id);
+  for (const r of [0, 255]) for (const g of gl) for (const b of [0, 255]) { const i = document.createElement('i'); i.style.background = `rgb(${r},${g},${b})`; el.appendChild(i); }
 }
-$('sKind').addEventListener('change', syncKindUI); syncKindUI();
-for (const id of ['sRgb', 'sZ']) {
-  const el = $(id); el.checked = store.get(id, el.checked ? '1' : '0') === '1'; el.addEventListener('change', () => store.set(id, el.checked ? '1' : '0'));
-}
-$('sRgb').addEventListener('change', () => { if (sess && !sGrid) { player.setRGB($('sRgb').checked); showSInfo(); } });
-$('sMs').addEventListener('change', () => { if (+$('sMs').value < 34) $('sMs').value = 34; showSInfo(); });
-$('sPx').addEventListener('change', fitSender);
+// 只记住两项基础设置
+if (store.get('kind', 'grid') === 'qr') $('kQr').checked = true;
+for (const id of ['kGrid', 'kQr']) $(id).addEventListener('change', () => store.set('kind', kind()));
+$('sZ').checked = store.get('sZ', '1') === '1';
+$('sZ').addEventListener('change', () => store.set('sZ', $('sZ').checked ? '1' : '0'));
 
 function showSInfo() {
-  if (!sess) return;
-  const ms = Math.max(34, +$('sMs').value || 66), per = sGrid ? sGrid.per : $('sRgb').checked ? 3 : 1, fps = 1000 / ms;
-  const secs = (sess.K + 2) / per / fps, rate = fmtB(fps * per * sess.C) + '/秒';
-  const head = `会话 ${sess.sid} · ${sess.meta.t === 'text' ? '文本' : sess.meta.name}${sess.meta.z ? '（已压缩）' : ''} · ${fmtB(sess.meta.len)} → 包 ${fmtB(sess.len)}`;
-  const L = sGrid && sGrid.L;
-  $('sInfo').textContent = L
-    ? `${head}
-彩格码 ${L.cols}×${L.rows} 格 · ${L.levels.reduce((a, b) => a * b, 1)} 色 · 码率 ${['1/3', '2/5', '1/2', '3/5', '2/3', '3/4', '4/5'][L.rateIdx]} · 每张 ${per} 块 × ${sess.C} 字节
-源块 K=${sess.K} · ${fps.toFixed(1)} 张/秒 · 满速约 ${rate}
-接收端收到任意约 ${sess.K + 2} 块即可还原（理想约 ${secs.toFixed(1)} 秒），漏块不用等下一轮`
-    : `${head}
-源块 K=${sess.K} · QR v${sess.type}（固定） · 纠错 ${sess.ecc} · ${fps.toFixed(1)} 码/秒${per === 3 ? ` × RGB 3 = ${(fps * 3).toFixed(1)} 帧/秒` : ''} · 满速约 ${rate}
-接收端收到任意约 ${sess.K + 2} 帧即可还原（理想约 ${secs.toFixed(1)} 秒），漏帧不用等下一轮`;
+  const el = $('sInfo');
+  if (!sess) { el.innerHTML = ''; return; }
+  const per = sGrid ? sGrid.per : 3, secs = (sess.K + 2) / per * INTERVAL_MS / 1000;
+  el.dataset.k = sess.K; el.dataset.per = per; el.dataset.ver = sGrid ? 'grid' : sess.type;
+  const t = secs < 60 ? `约 ${Math.max(1, Math.ceil(secs))} 秒` : `约 ${(secs / 60).toFixed(1)} 分钟`;
+  el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? '（已压缩）' : ''}，满速 ${fmtB(1000 / INTERVAL_MS * per * sess.C)}/秒，${t}传完。`
+    + `<small>接收端收到任意 ${sess.K + 2} 块就能还原，漏掉的不用等下一轮。会话 ${sess.sid}</small>`;
 }
 
 $('sGen').onclick = async () => {
   player.stop(); syncPlayBtn();
-  $('sGen').disabled = true; $('sInfo').textContent = '处理中…';
+  $('sGen').disabled = true; $('sErr').textContent = '';
   try {
     const { meta, data } = await QXS.prepareInput({ file: sFile, text: $('sText').value, compress: $('sZ').checked });
     let s, grid = null;
-    if ($('sKind').value === 'grid') {
-      const [lv, rate] = $('gLv').value.split(':');
-      const L = QXG.makeLayout(QXG.profile({ long: +$('gLong').value, levels: [...lv].map(Number), rate: +rate, tile: GRID_TILE }));
+    if (kind() === 'grid') {
+      const L = QXG.makeLayout(QXG.profile(GRID));
       s = new QXS.SenderSession(meta, data, { chunk: L.C, qr: false });
       grid = new QXG.GridFramer(s, L);
-    } else s = new QXS.SenderSession(meta, data, { chunk: +$('sChunk').value || 500, ecc: $('sEcc').value });
-    const ms = Math.max(34, +$('sMs').value || 66), per = grid ? grid.per : $('sRgb').checked ? 3 : 1;
-    const mins = (s.K + 2) / per * ms / 60000;
-    if (mins > 3 && !confirm(`共 ${s.K} 块，至少约 ${mins.toFixed(1)} 分钟。继续？`)) { $('sInfo').textContent = '已取消'; return; }
-    sess = s; sGrid = grid; if (!grid) $('sChunk').value = s.C; $('sOnly').value = '';
+    } else s = new QXS.SenderSession(meta, data, { chunk: QR.chunk, ecc: QR.ecc });
+    const per = grid ? grid.per : 3, mins = (s.K + 2) / per * INTERVAL_MS / 60000;
+    if (mins > 3 && !confirm(`内容较大，至少需要约 ${mins.toFixed(1)} 分钟。继续？`)) return;
+    sess = s; sGrid = grid;
     $('stageEmpty').hidden = true; $('stageBox').hidden = false;
-    for (const id of ['sPlay', 'sPrev', 'sNext', 'sRestart', 'sFull']) $(id).disabled = false;
-    player.load(sess, $('sRgb').checked, grid);
+    for (const id of ['sPlay', 'sFull']) $(id).disabled = false;
+    player.load(sess, QR.rgb, grid);
     showSInfo();
     player.play(); syncPlayBtn(); keepAwake(true);
     if (innerWidth < 900) $('stage').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  } catch (e) { $('sInfo').textContent = '❌ ' + e.message; }
-  finally { $('sGen').disabled = false; }
+  } catch (e) { $('sErr').textContent = e.message; }
+  finally { $('sGen').disabled = false; $('sGen').blur(); }
 };
 const togglePlay = () => { if (!sess) return; player.playing ? player.stop() : player.play(); syncPlayBtn(); keepAwake(player.playing); };
+const step = d => { if (!sess) return; player.stop(); syncPlayBtn(); player.step(d); };
 $('sPlay').onclick = togglePlay; $('fsPlay').onclick = togglePlay;
-$('sPrev').onclick = () => { player.stop(); syncPlayBtn(); player.step(-1); };
-$('sNext').onclick = () => { player.stop(); syncPlayBtn(); player.step(1); };
-$('sRestart').onclick = () => { if (!sess) return; player.setOnly(null); $('sOnly').value = ''; player.restart(); };
-$('sApply').onclick = () => { if (!sess) return; const l = QXS.parseRanges($('sOnly').value, sess.K); player.setOnly(l.length ? l : null); };
 const setFull = on => { if (!sess) return; $('stage').classList.toggle('full', on); requestAnimationFrame(() => player.render()); };
 $('sFull').onclick = () => setFull(true);
 $('fsExit').onclick = () => setFull(false);
 $('sCv').ondblclick = () => setFull(!$('stage').classList.contains('full'));
-addEventListener('keydown', e => { if (e.key === 'Escape' && $('stage').classList.contains('full')) setFull(false); });
+// 键盘：空格 暂停/继续 · ←/→ 逐张 · Home 从头 · F 全屏 · Esc 退出全屏（输入框里不响应）
+addEventListener('keydown', e => {
+  if ($('send').hidden || /^(TEXTAREA|INPUT)$/.test(document.activeElement && document.activeElement.tagName)) return;
+  const full = $('stage').classList.contains('full');
+  if (e.key === 'Escape' && full) setFull(false);
+  else if (e.key === ' ' && sess) { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'ArrowRight') step(1);
+  else if (e.key === 'ArrowLeft') step(-1);
+  else if (e.key === 'Home' && sess) { player.stop(); syncPlayBtn(); player.restart(); }
+  else if ((e.key === 'f' || e.key === 'F') && sess) setFull(!full);
+});
 
 /* ---------- 启动 ---------- */
 syncScanUI();

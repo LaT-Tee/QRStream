@@ -10,10 +10,10 @@ const { chromium, WEB, TMP, check, finish } = require('../helpers/common');
     let ctx = await chromium.launchPersistentContext(ud, {});
     let p = ctx.pages()[0];
     await p.goto(URL);
-    await p.waitForFunction(() => /可离线/.test(document.querySelector('#net').textContent), null, { timeout: 15000 }).catch(() => {});
+    await p.waitForFunction(() => /离线可用/.test(document.querySelector('#net').textContent), null, { timeout: 15000 }).catch(() => {});
     const badge = await p.textContent('#net');
     await ctx.close();
-    check(/可离线/.test(badge), `在线打开后角标显示「${badge}」`);
+    check(/离线可用/.test(badge), `在线打开后角标显示「${badge}」`);
 
     ctx = await chromium.launchPersistentContext(ud, { offline: true });   // 相当于飞行模式下点主屏幕图标
     p = ctx.pages()[0];

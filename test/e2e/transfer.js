@@ -1,7 +1,7 @@
 // 端到端：发送页生成帧 → ffmpeg 合成摄像头视频 → Chromium 假摄像头 → 接收页还原；含 RGB 与断点续传
 const path = require('path'), fs = require('fs');
 const { serve } = require('../helpers/serve');
-const { WEB, TMP, sleep, randText, captureSender, makeVideo, receive, check, finish } = require('../helpers/common');
+const { WEB, TMP, sleep, randText, captureSender, nodeFrames, makeVideo, receive, check, finish } = require('../helpers/common');
 
 (async () => {
   const srv = await serve(WEB, 8765);
@@ -9,7 +9,8 @@ const { WEB, TMP, sleep, randText, captureSender, makeVideo, receive, check, fin
   try {
     for (const rgb of [false, true]) {
       const name = rgb ? 'RGB' : '黑白', text = randText(5000);
-      const cap = await captureSender(URL, text, { rgb });
+      // RGB 是发送页的二维码默认设置，走界面；黑白（旧版/油猴发送端）直接在 Node 里生成
+      const cap = rgb ? await captureSender(URL, text, { kind: 'qr' }) : await nodeFrames(text, { kind: 'qr', rgb: false, chunk: 400 });
       console.log(`\n[${name}] K=${cap.K} QRv${cap.ver} 帧数=${cap.frames.length}  ${cap.frames[0].label}`);
       const r = await receive(URL, makeVideo(cap.frames, rgb ? 'rgb' : 'mono'));
       console.log('  ' + r.status + '\n  ' + r.perf);
@@ -20,7 +21,7 @@ const { WEB, TMP, sleep, randText, captureSender, makeVideo, receive, check, fin
 
     console.log('\n[断点续传] 第一次只给前 5 个源帧；第二次只给冗余帧');
     const text = randText(6000);
-    const cap = await captureSender(URL, text);
+    const cap = await nodeFrames(text, { kind: 'qr', rgb: false, chunk: 400 });
     const ud = path.join(TMP, 'profile');
     const r1 = await receive(URL, makeVideo(cap.frames.slice(0, 5), 'part1'), { userDataDir: ud, waitDone: false, timeout: 9000 });
     console.log('  第一次：' + r1.status);

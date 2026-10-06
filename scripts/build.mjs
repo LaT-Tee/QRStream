@@ -61,6 +61,7 @@ const parts = {
   '/*@QRCODE_LIB*/': safe(qrlib, 'qrcode-generator'),
   '/*@CODEC*/': safe(codec, 'codec.js'),
   '/*@SENDER_CORE*/': safe(sender, 'sender-core.js'),
+  '/*@GRID_CODE*/': safe(grid, 'grid-code.js'),
 };
 
 /* ---------- index.html ---------- */
@@ -69,10 +70,10 @@ const html = fill(src('app.html'), {
   '/*@ZXING_JS*/': safe(zxJs, 'zxing-wasm'),
   '/*@ZXING_WASM_B64*/': rawDeflateB64(zxWasm),
   '/*@JSQR_B64*/': rawDeflateB64(jsqr),
-  '/*@GRID_CODE*/': safe(grid, 'grid-code.js'),
   '/*@SCAN_WORKER*/': safe(codec + '\n' + scanCore + '\n' + grid + '\n' + src('scan-worker.js'), 'scan-worker'),
   '/*@DECODE_WORKER*/': safe(codec + '\n' + src('decode-worker.js'), 'decode-worker'),
   '/*@VERSION*/': pkg.version,
+  '/*@FONT_DOTO*/': fs.readFileSync(mod('@fontsource/doto/files/doto-latin-900-normal.woff2')).toString('base64'),
 }, 'app.html');
 const BANNER = `<!-- QRStream v${pkg.version} · MIT License
      Bundled third-party code: zxing-wasm (MIT) wrapping zxing-cpp (Apache-2.0), jsQR (Apache-2.0),
@@ -85,6 +86,7 @@ const lic = [
   ['zxing-cpp (Apache-2.0, compiled into zxing_reader.wasm) — https://github.com/zxing-cpp/zxing-cpp', path.join(path.dirname(mod('jsqr/dist/jsQR.js')), '..', 'LICENSE')],
   ['jsQR (Apache-2.0) — https://github.com/cozmo/jsQR', path.join(path.dirname(mod('jsqr/dist/jsQR.js')), '..', 'LICENSE')],
   ['qrcode-generator (MIT) — https://github.com/kazuhikoarase/qrcode-generator', null],
+  ['Doto font (SIL OFL 1.1), latin 900 subset via @fontsource/doto — https://github.com/oliverlalan/Doto', path.join(path.dirname(mod('@fontsource/doto/package.json')), 'LICENSE')],
 ];
 const MIT_QRGEN = `Copyright (c) 2009 Kazuhiko Arase
 
@@ -127,7 +129,7 @@ fs.writeFileSync(path.join(WEB, 'sw.js'), fill(src('sw.js'), { '/*@VERSION*/': c
 
 /* ---------- 油猴脚本 ---------- */
 // 设置环境变量 USERSCRIPT_URL（脚本的公开下载地址）后，会写入 @updateURL/@downloadURL，油猴可自动更新
-let us = fill(src('userscript.js'), { ...parts, '/*@VERSION*/': pkg.version }, 'userscript.js');
+let us = fill(src('userscript.js'), { ...parts, '/*@VERSION*/': pkg.version, '/*@FONT_DOTO*/': fs.readFileSync(mod('@fontsource/doto/files/doto-latin-900-normal.woff2')).toString('base64') }, 'userscript.js');
 if (process.env.USERSCRIPT_URL) us = us.replace('// @noframes', `// @noframes\n// @updateURL    ${process.env.USERSCRIPT_URL}\n// @downloadURL  ${process.env.USERSCRIPT_URL}`);
 fs.writeFileSync(path.join(OUT, 'qrstream-sender.user.js'), us);
 
