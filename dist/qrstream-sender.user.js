@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         QRStream Sender
 // @namespace    qrstream.sender
-// @version      1.4.0
+// @version      1.4.1
 // @license      MIT
 // @description  Alt+Q 打开发送面板：彩格码（默认）或二维码，喷泉码抗丢帧。依赖全部内联，离线可用
 // @match        *://*/*

@@ -91,16 +91,18 @@ video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:
   background:transparent;color:#fff;cursor:pointer;text-align:center}
 #camIdle strong{font-size:19px;font-weight:650}
 #camIdle span{font-size:13px;color:rgba(255,255,255,.62)}
-.readout{display:grid;gap:18px;min-width:0}
+.readout{display:grid;gap:18px;min-width:0;font-variant-numeric:tabular-nums}
 .pct{display:grid;gap:12px;min-width:0}
 #bigPct{font:900 88px/.85 var(--dot);padding-right:.15em}
-#status{font-size:15px;color:var(--ink2);min-width:0;word-break:break-word;text-wrap:pretty}
+#status{font-size:15px;line-height:1.45;min-height:2.9em;color:var(--ink2);min-width:0;word-break:break-word;text-wrap:pretty}
+/* 传输中固定两行、每行不折行（等宽数字），数字变长变短不会让行数跳变 */
+#status .ln{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #status.done{color:var(--ink);font-weight:600}
 #gcv{display:block;width:100%;max-height:230px;object-fit:contain;object-position:left top;image-rendering:pixelated}
 .key{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--ink2);margin-top:-6px}
 .key i{display:inline-block;width:9px;height:9px;margin-right:7px;vertical-align:0}
-#missing,#perf{font-size:13px;color:var(--ink3)}
-#missing:empty,#perf:empty,#log:empty{display:none}
+#perf{font-size:13px;line-height:1.45;min-height:2.9em;color:var(--ink3)}
+#perf:empty,#log:empty{display:none}
 #log{font-size:12px;color:var(--ink3);word-break:break-all}
 .ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .ctl .grow{flex:1}
@@ -170,7 +172,7 @@ input.sw:checked::before{transform:translateX(18px)}
 #stage.full #fsTools{display:flex;gap:4px;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--sab) + 18px);padding:4px;border-radius:999px;background:#000}
 #stage.full #fsTools .btn{min-height:42px;border:0;color:#fff;font-size:14px}
 .playbar{display:flex;align-items:center;gap:10px;margin-top:14px}
-#sIdx{flex:1;font-size:14px;color:var(--ink2)}
+#sIdx{flex:1;min-width:0;font-size:14px;color:var(--ink2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .playbar .btn{min-height:42px;padding:0 18px}
 #sInfo{margin:14px 0 0;font-size:15px;color:var(--ink);max-width:36em}
 #sInfo small{display:block;margin-top:4px;font-size:13px;color:var(--ink3)}
@@ -203,7 +205,6 @@ input.sw:checked::before{transform:translateX(18px)}
     <div class="pct"><span id="bigPct" aria-label="接收进度">0%</span><div id="status">未开始</div></div>
     <canvas id="gcv" width="1" height="1" aria-label="每个块的接收情况" hidden></canvas>
     <div class="key" id="key" hidden><span><i style="background:var(--g)"></i>直接收到</span><span><i style="background:var(--b)"></i>冗余补出</span><span><i style="background:var(--idle)"></i>还没收到</span></div>
-    <div id="missing"></div>
     <div class="ctl">
       <button class="btn solid big grow" id="start">开始扫描</button>
       <button class="btn big grow" id="stopBtn" hidden>停止</button>
@@ -369,7 +370,7 @@ function initGrid(K) {
 function setResultVisible(v) { $('resultCard').hidden = !v; }
 
 function resetSession() {
-  S = null; ui = null; cells = null; lastRaw = ''; $('missing').textContent = ''; $('result').innerHTML = ''; setResultVisible(false);
+  S = null; ui = null; cells = null; lastRaw = ''; $('result').innerHTML = ''; setResultVisible(false);
   const g = $('gcv'); g.width = 1; g.height = 1; g.hidden = true; $('key').hidden = true;
   setPct(0);
   getWorkers(); decW.postMessage({ cmd: 'reset' }); scanW.postMessage({ reset: true });
@@ -383,10 +384,10 @@ function scheduleUI() {
     uiPending = false; if (!S || S.done || !ui) return;
     const pct = ui.rank / S.K * 100, need = S.K - ui.rank;
     setPct(pct);
-    setStatus(`已收 ${ui.rank} / ${S.K} 块，还差约 ${need + 2} 块。保持对准即可。`);
-   
     const pending = ui.rank - ui.known;
-    $('missing').textContent = pending > 0 ? `灰色里有 ${pending} 块已被冗余数据抵上，收齐时一起解出。` : '';
+    $('status').classList.remove('done');
+    $('status').innerHTML = `<span class="ln">已收 ${ui.rank} / ${S.K} 块，还差约 ${need + 2} 块</span>`
+      + `<span class="ln">${pending > 0 ? `其中 ${pending} 块由冗余补上，收齐后解出` : '保持对准即可'}</span>`;
   });
 }
 
@@ -411,7 +412,7 @@ function onDec(e) {
       if (S) S.done = true;
       stopScan();
       if (cells) for (let i = 0; i < m.K; i++) setCell(i, 2);   // 剩下的块都是收齐后由冗余数据消元解出的
-      $('missing').textContent = ''; setPct(100);
+      setPct(100);
       {
         const secs = Math.max(0.1, m.secs), zip = m.meta.z ? `，压缩后实际传了 ${fmtB(m.plen)}（${m.meta.z === 'lzma' ? 'LZMA' : 'deflate'}）` : '';
         setStatus(`✅ 收好了：${m.meta.t === 'text' ? '一段文字' : m.meta.name}，${fmtB(m.meta.len)}。用时 ${secs.toFixed(1)} 秒，平均 ${fmtB(m.meta.len / secs)}/秒${zip}。`, true);

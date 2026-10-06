@@ -1,6 +1,6 @@
 {
   "name": "qrstream",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Air-gapped file transfer over animated QR codes: fountain code + optional RGB 3-channel, offline PWA receiver/sender and a userscript sender.",
   "license": "MIT",
   "private": true,
