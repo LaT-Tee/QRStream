@@ -30,7 +30,7 @@ meta 字段：
 | `t` | `"text"` \| `"file"` | 类型 |
 | `name` | string | 文件名（文本为 `text.txt`） |
 | `mime` | string | MIME 类型 |
-| `z` | `false` \| `true` \| `"lzma"` | 压缩方式：`false` 不压缩；`true` 为 zlib 格式 deflate（`CompressionStream('deflate')`）；`"lzma"`（1.4.0 起）为 LZMA-alone 格式（`.lzma`：13 字节头 + LZMA 流，与 7-Zip / xz-utils `--format=lzma` 相同），发送端用 LZMA-JS 第 3 级压缩。1.3.0 及更早的接收端不认识 `"lzma"`，会报解压失败 |
+| `z` | `false` \| `true` \| `"lzma"` | 压缩方式：`false` 不压缩；`true` 为 zlib 格式 deflate（`CompressionStream('deflate')`）；`"lzma"`（1.4.0 起）为 LZMA-alone 格式（`.lzma`：13 字节头 + LZMA 流，与 7-Zip / xz-utils `--format=lzma` 相同），发送端用 LZMA-JS 压缩（≤ 512 KB 第 3 级，更大第 4 级；接收端按头部的字典大小解压，与等级无关）。1.3.0 及更早的接收端不认识 `"lzma"`，会报解压失败 |
 | `len` | number | **解压后**数据的字节数，用于校验 |
 
 数据包总长记为 `LEN`。选取块大小 `C`（4 的倍数，≥ 52），`K = ceil(LEN / C)`，末块补 0 到 `K × C`。

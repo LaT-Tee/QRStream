@@ -22,7 +22,7 @@ async function init(a) {
     });
   } catch (e) {
     importScripts(blobURL(a.jsqrJs));
-    engine = 'jsQR（备用）';
+    engine = 'jsQR 备用引擎';
     scan = QXScan.makeScanner(async (px, w, h) => { const c = jsQR(px, w, h, { inversionAttempts: 'dontInvert' }); return c ? c.data : null; });
   }
   postMessage({ ready: engine });

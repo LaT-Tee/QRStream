@@ -127,18 +127,18 @@
     root.innerHTML = `<style>${CSS}</style>
     <div class="p" id="p">
       <div class="hd" id="hd"><span class="mark"></span><span class="ttl">QRStream</span>
-        <button class="ib" id="qrx-edit" hidden>换内容</button><button class="ib" id="qrx-close" title="关闭（Alt+Q 再打开）" aria-label="关闭">✕</button></div>
+        <button class="ib" id="qrx-edit" hidden>换内容</button><button class="ib" id="qrx-close" title="关闭，Alt+Q 再打开" aria-label="关闭">✕</button></div>
       <div class="bd">
         <div class="compose">
           <div class="sheet">
-            <textarea id="qrx-text" aria-label="要发送的内容" placeholder="输入或粘贴要发送的文字。截图可以直接粘贴。"></textarea>
+            <textarea id="qrx-text" aria-label="要发送的内容" placeholder="输入或粘贴文字&#10;截图可直接粘贴"></textarea>
             <div class="frow"><label class="pick">选择文件<input type="file" id="qrx-file"></label><span class="fname" id="qrx-file-name"></span><button class="x" id="qrx-clearfile" hidden>移除</button></div>
             <div class="opts">
               <div class="seg" role="radiogroup" aria-label="码型">
-                <label><input type="radio" name="k" id="qrx-grid" checked><b>彩格码</b><span class="pal" id="palG"></span><small>最快。用 QRStream 接收</small></label>
+                <label><input type="radio" name="k" id="qrx-grid" checked><b>彩格码</b><span class="pal" id="palG"></span><small>最快，用 QRStream 接收</small></label>
                 <label><input type="radio" name="k" id="qrx-qr"><b>二维码</b><span class="pal" id="palQ"></span><small>旧版接收端也能读</small></label>
               </div>
-              <label class="sw"><span>压缩<small>无损，自动选 LZMA 或 deflate 里更小的</small></span><input type="checkbox" id="qrx-z" checked></label>
+              <label class="sw"><span>压缩<small>无损，LZMA 或 deflate 自动择优</small></span><input type="checkbox" id="qrx-z" checked></label>
             </div>
           </div>
           <button class="btn solid wide" id="qrx-gen">开始播放</button>
@@ -187,8 +187,8 @@
     const per = sGrid ? sGrid.per : 3, secs = (sess.K + 2) / per * INTERVAL_MS / 1000, el = $('qrx-info');
     el.dataset.k = sess.K; el.dataset.per = per; el.dataset.ver = sGrid ? 'grid' : sess.type;
     const t = secs < 60 ? `约 ${Math.max(1, Math.ceil(secs))} 秒` : `约 ${(secs / 60).toFixed(1)} 分钟`;
-    el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? `，压缩后 ${fmtB(sess.len)}（${sess.meta.z === 'lzma' ? 'LZMA' : 'deflate'}）` : ''}，${t}传完。`
-      + `<small>接收端收到任意 ${sess.K + 2} 块就能还原。会话 ${sess.sid}</small>`;
+    el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? ` → ${sess.meta.z === 'lzma' ? 'LZMA' : 'deflate'} 压缩后 ${fmtB(sess.len)}` : ''}<br>${t}传完`
+      + `<small>收到任意 ${sess.K + 2} 块即可还原 · 会话 ${sess.sid}</small>`;
   }
 
   function dragable(box, handle) {
@@ -216,7 +216,7 @@
       grid = new QXG.GridFramer(s, L);
     } else s = new QXS.SenderSession(meta, data, { chunk: QR.chunk, ecc: QR.ecc });
     const per = grid ? grid.per : 3, mins = (s.K + 2) / per * INTERVAL_MS / 60000;
-    if (mins > 3 && !confirm(`内容较大，至少需要约 ${mins.toFixed(1)} 分钟。继续？`)) return;
+    if (mins > 3 && !confirm(`内容较大，至少要 ${mins.toFixed(1)} 分钟，继续？`)) return;
     sess = s; sGrid = grid;
     $('qrx-out').hidden = false; $('p').classList.add('playing'); $('qrx-edit').hidden = false; $('qrx-edit').textContent = '换内容';
     player.load(sess, QR.rgb, grid);
@@ -224,7 +224,7 @@
     player.play();
   }
 
-  if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('打开 QRStream 发送面板 (Alt+Q)', openPanel);
+  if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('打开 QRStream 发送面板 · Alt+Q', openPanel);
   window.addEventListener('keydown', e => { if (e.altKey && (e.key === 'q' || e.key === 'Q' || e.code === 'KeyQ')) { e.preventDefault(); openPanel(); } });
 })();
 /* jshint ignore:end */

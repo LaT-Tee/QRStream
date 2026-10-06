@@ -85,7 +85,7 @@ async function startSession(f) {
     for (const fr of frames) { if (S.dec.add(fr.seq, fr.payload) === 'useful') allNew.push(...S.dec.newly); }
     if (frames.length) {
       S.dec.newly = allNew;
-      post({ type: 'log', msg: `已从本机恢复 ${frames.length} 帧（会话 ${f.sid}）` });
+      post({ type: 'log', msg: `已从本机恢复 ${frames.length} 帧` });
       progress();
       if (S.dec.done) await finish();
     }
@@ -125,7 +125,7 @@ async function finish() {
   S.dec.solve(p => { if (p - lastP > 0.02) { lastP = p; post({ type: 'solving', pct: p }); } });
   const pkt = S.dec.packet(S.len);
   const secs = (performance.now() - S.t0) / 1000;
-  if (hex(crc32n(pkt), 8) !== S.crc) { post({ type: 'fail', msg: 'CRC 校验失败，请重置后重扫' }); await idbDeleteSession(S.sid); return; }
+  if (hex(crc32n(pkt), 8) !== S.crc) { post({ type: 'fail', msg: 'CRC 校验失败，请清空后重扫' }); await idbDeleteSession(S.sid); return; }
   try {
     const dv = new DataView(pkt.buffer, pkt.byteOffset, pkt.byteLength), mlen = dv.getUint32(0);
     const meta = JSON.parse(new TextDecoder().decode(pkt.subarray(4, 4 + mlen)));
@@ -136,7 +136,7 @@ async function finish() {
       if (r == null) throw new Error('LZMA 解压失败');
       data = typeof r === 'string' ? new TextEncoder().encode(r) : Uint8Array.from(r, x => x & 255);
     } else if (meta.z) {
-      if (typeof DecompressionStream === 'undefined') throw new Error('此浏览器不支持解压（需 iOS 16.4+ / Chrome 80+），请在发送端取消压缩');
+      if (typeof DecompressionStream === 'undefined') throw new Error('此浏览器不支持解压，需要 iOS 16.4+ 或 Chrome 80+；也可以让发送端关掉压缩');
       data = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer());
     }
     if (data.length !== meta.len) throw new Error(`长度不一致 ${data.length} != ${meta.len}`);

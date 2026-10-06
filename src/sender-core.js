@@ -13,11 +13,14 @@
   }
   /* LZMA（7z / xz 用的算法，LZMA-JS 实现）：比 deflate 再小 12%–37%（文本、表格、BMP 等），速度约为 deflate 的几分之一。
    * 输出 .lzma（LZMA-alone）格式。等级 3 = 512 KB 字典：大文件比等级 1 小 15%，速度相同；更高等级几乎不再变小却慢好几倍 */
-  const LZMA_LEVEL = 3, LZMA_MAX = 32 << 20;
+  /* LZMA 等级按「压缩耗时 + 传输耗时」最短选（实测见 docs/SIMULATION.md 第 7 节）：
+     字典能盖住整个文件就够了，再高的等级不变小反而更慢、更占内存（第 9 级压 3 MB 文本要 41 秒、1.8 GB 内存）。
+     ≤ 512 KB 用第 3 级（字典 512 KB）；更大用第 4 级（字典 1 MB）。 */
+  const lzmaLevel = n => n > (512 << 10) ? 4 : 3, LZMA_MAX = 32 << 20;
   const lzmaLib = () => root.LZMA || (typeof require === 'function' ? (() => { try { return require('lzma/src/lzma_worker.js').LZMA; } catch (e) { return null; } })() : null);
   async function lzmaCompress(u8, onProgress) {
     const L = lzmaLib(); if (!L || u8.length > LZMA_MAX) return null;
-    const out = await new Promise((res, rej) => L.compress(u8, LZMA_LEVEL, (r, err) => err ? rej(err) : res(r), p => onProgress && onProgress(p)));
+    const out = await new Promise((res, rej) => L.compress(u8, lzmaLevel(u8.length), (r, err) => err ? rej(err) : res(r), p => onProgress && onProgress(p)));
     const c = Uint8Array.from(out, x => x & 255);
     // 自检：解回来必须逐字节一致（LZMA-JS 解压时会把合法 UTF-8 还成字符串，这里连同这一步一起验证），否则不用 LZMA
     const back = await new Promise(res => L.decompress(c, r => res(r)));
@@ -35,7 +38,7 @@
       data = new Uint8Array(await f.arrayBuffer());
       meta = { t: 'file', name: f.name || 'file.bin', mime: f.type || 'application/octet-stream', z: false, len: data.length };
     } else {
-      if (!opts.text) throw new Error('先输入要发送的文字，或选一个文件。');
+      if (!opts.text) throw new Error('先输入文字或选一个文件');
       data = new TextEncoder().encode(opts.text);
       meta = { t: 'text', name: 'text.txt', mime: 'text/plain;charset=utf-8', z: false, len: data.length };
     }
@@ -63,7 +66,7 @@
       const len = 4 + mb.length + data.length;
       const C = Math.max(qr ? 52 : 16, (chunk | 0) & ~3);       // 4 的倍数，冗余帧按 32 位字 XOR
       const K = Math.ceil(len / C);
-      if (K > 20000) throw new Error(`数据太大：K=${K} 超过 20000（每块 ${C} 字节，上限约 ${(20000 * C / 1048576).toFixed(1)} MB），请压缩，或${qr ? '调大每帧字节' : '换更快的档位 / 更小的格子，或改用二维码'}`);
+      if (K > 20000) throw new Error(`内容太大：最多约 ${(20000 * C / 1048576).toFixed(1)} MB`);
       const padded = new Uint8Array(K * C);
       new DataView(padded.buffer).setUint32(0, mb.length); padded.set(mb, 4); padded.set(data, 4 + mb.length);
       Object.assign(this, { meta, len, C, K, ecc, padded,

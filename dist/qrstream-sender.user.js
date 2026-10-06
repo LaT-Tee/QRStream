@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         QRStream Sender
 // @namespace    qrstream.sender
-// @version      1.4.1
+// @version      1.4.2
 // @license      MIT
 // @description  Alt+Q 打开发送面板：彩格码（默认）或二维码，喷泉码抗丢帧。依赖全部内联，离线可用
 // @match        *://*/*
@@ -3301,11 +3301,14 @@ if(n+2>=i)return e;if(t=255&e[++n],128!=(192&t))return e;if(o=255&e[++n],128!=(1
   }
   /* LZMA（7z / xz 用的算法，LZMA-JS 实现）：比 deflate 再小 12%–37%（文本、表格、BMP 等），速度约为 deflate 的几分之一。
    * 输出 .lzma（LZMA-alone）格式。等级 3 = 512 KB 字典：大文件比等级 1 小 15%，速度相同；更高等级几乎不再变小却慢好几倍 */
-  const LZMA_LEVEL = 3, LZMA_MAX = 32 << 20;
+  /* LZMA 等级按「压缩耗时 + 传输耗时」最短选（实测见 docs/SIMULATION.md 第 7 节）：
+     字典能盖住整个文件就够了，再高的等级不变小反而更慢、更占内存（第 9 级压 3 MB 文本要 41 秒、1.8 GB 内存）。
+     ≤ 512 KB 用第 3 级（字典 512 KB）；更大用第 4 级（字典 1 MB）。 */
+  const lzmaLevel = n => n > (512 << 10) ? 4 : 3, LZMA_MAX = 32 << 20;
   const lzmaLib = () => root.LZMA || (typeof require === 'function' ? (() => { try { return require('lzma/src/lzma_worker.js').LZMA; } catch (e) { return null; } })() : null);
   async function lzmaCompress(u8, onProgress) {
     const L = lzmaLib(); if (!L || u8.length > LZMA_MAX) return null;
-    const out = await new Promise((res, rej) => L.compress(u8, LZMA_LEVEL, (r, err) => err ? rej(err) : res(r), p => onProgress && onProgress(p)));
+    const out = await new Promise((res, rej) => L.compress(u8, lzmaLevel(u8.length), (r, err) => err ? rej(err) : res(r), p => onProgress && onProgress(p)));
     const c = Uint8Array.from(out, x => x & 255);
     // 自检：解回来必须逐字节一致（LZMA-JS 解压时会把合法 UTF-8 还成字符串，这里连同这一步一起验证），否则不用 LZMA
     const back = await new Promise(res => L.decompress(c, r => res(r)));
@@ -3323,7 +3326,7 @@ if(n+2>=i)return e;if(t=255&e[++n],128!=(192&t))return e;if(o=255&e[++n],128!=(1
       data = new Uint8Array(await f.arrayBuffer());
       meta = { t: 'file', name: f.name || 'file.bin', mime: f.type || 'application/octet-stream', z: false, len: data.length };
     } else {
-      if (!opts.text) throw new Error('先输入要发送的文字，或选一个文件。');
+      if (!opts.text) throw new Error('先输入文字或选一个文件');
       data = new TextEncoder().encode(opts.text);
       meta = { t: 'text', name: 'text.txt', mime: 'text/plain;charset=utf-8', z: false, len: data.length };
     }
@@ -3351,7 +3354,7 @@ if(n+2>=i)return e;if(t=255&e[++n],128!=(192&t))return e;if(o=255&e[++n],128!=(1
       const len = 4 + mb.length + data.length;
       const C = Math.max(qr ? 52 : 16, (chunk | 0) & ~3);       // 4 的倍数，冗余帧按 32 位字 XOR
       const K = Math.ceil(len / C);
-      if (K > 20000) throw new Error(`数据太大：K=${K} 超过 20000（每块 ${C} 字节，上限约 ${(20000 * C / 1048576).toFixed(1)} MB），请压缩，或${qr ? '调大每帧字节' : '换更快的档位 / 更小的格子，或改用二维码'}`);
+      if (K > 20000) throw new Error(`内容太大：最多约 ${(20000 * C / 1048576).toFixed(1)} MB`);
       const padded = new Uint8Array(K * C);
       new DataView(padded.buffer).setUint32(0, mb.length); padded.set(mb, 4); padded.set(data, 4 + mb.length);
       Object.assign(this, { meta, len, C, K, ecc, padded,
@@ -3588,18 +3591,18 @@ if(n+2>=i)return e;if(t=255&e[++n],128!=(192&t))return e;if(o=255&e[++n],128!=(1
     root.innerHTML = `<style>${CSS}</style>
     <div class="p" id="p">
       <div class="hd" id="hd"><span class="mark"></span><span class="ttl">QRStream</span>
-        <button class="ib" id="qrx-edit" hidden>换内容</button><button class="ib" id="qrx-close" title="关闭（Alt+Q 再打开）" aria-label="关闭">✕</button></div>
+        <button class="ib" id="qrx-edit" hidden>换内容</button><button class="ib" id="qrx-close" title="关闭，Alt+Q 再打开" aria-label="关闭">✕</button></div>
       <div class="bd">
         <div class="compose">
           <div class="sheet">
-            <textarea id="qrx-text" aria-label="要发送的内容" placeholder="输入或粘贴要发送的文字。截图可以直接粘贴。"></textarea>
+            <textarea id="qrx-text" aria-label="要发送的内容" placeholder="输入或粘贴文字&#10;截图可直接粘贴"></textarea>
             <div class="frow"><label class="pick">选择文件<input type="file" id="qrx-file"></label><span class="fname" id="qrx-file-name"></span><button class="x" id="qrx-clearfile" hidden>移除</button></div>
             <div class="opts">
               <div class="seg" role="radiogroup" aria-label="码型">
-                <label><input type="radio" name="k" id="qrx-grid" checked><b>彩格码</b><span class="pal" id="palG"></span><small>最快。用 QRStream 接收</small></label>
+                <label><input type="radio" name="k" id="qrx-grid" checked><b>彩格码</b><span class="pal" id="palG"></span><small>最快，用 QRStream 接收</small></label>
                 <label><input type="radio" name="k" id="qrx-qr"><b>二维码</b><span class="pal" id="palQ"></span><small>旧版接收端也能读</small></label>
               </div>
-              <label class="sw"><span>压缩<small>无损，自动选 LZMA 或 deflate 里更小的</small></span><input type="checkbox" id="qrx-z" checked></label>
+              <label class="sw"><span>压缩<small>无损，LZMA 或 deflate 自动择优</small></span><input type="checkbox" id="qrx-z" checked></label>
             </div>
           </div>
           <button class="btn solid wide" id="qrx-gen">开始播放</button>
@@ -3648,8 +3651,8 @@ if(n+2>=i)return e;if(t=255&e[++n],128!=(192&t))return e;if(o=255&e[++n],128!=(1
     const per = sGrid ? sGrid.per : 3, secs = (sess.K + 2) / per * INTERVAL_MS / 1000, el = $('qrx-info');
     el.dataset.k = sess.K; el.dataset.per = per; el.dataset.ver = sGrid ? 'grid' : sess.type;
     const t = secs < 60 ? `约 ${Math.max(1, Math.ceil(secs))} 秒` : `约 ${(secs / 60).toFixed(1)} 分钟`;
-    el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? `，压缩后 ${fmtB(sess.len)}（${sess.meta.z === 'lzma' ? 'LZMA' : 'deflate'}）` : ''}，${t}传完。`
-      + `<small>接收端收到任意 ${sess.K + 2} 块就能还原。会话 ${sess.sid}</small>`;
+    el.innerHTML = `${fmtB(sess.meta.len)}${sess.meta.z ? ` → ${sess.meta.z === 'lzma' ? 'LZMA' : 'deflate'} 压缩后 ${fmtB(sess.len)}` : ''}<br>${t}传完`
+      + `<small>收到任意 ${sess.K + 2} 块即可还原 · 会话 ${sess.sid}</small>`;
   }
 
   function dragable(box, handle) {
@@ -3677,7 +3680,7 @@ if(n+2>=i)return e;if(t=255&e[++n],128!=(192&t))return e;if(o=255&e[++n],128!=(1
       grid = new QXG.GridFramer(s, L);
     } else s = new QXS.SenderSession(meta, data, { chunk: QR.chunk, ecc: QR.ecc });
     const per = grid ? grid.per : 3, mins = (s.K + 2) / per * INTERVAL_MS / 60000;
-    if (mins > 3 && !confirm(`内容较大，至少需要约 ${mins.toFixed(1)} 分钟。继续？`)) return;
+    if (mins > 3 && !confirm(`内容较大，至少要 ${mins.toFixed(1)} 分钟，继续？`)) return;
     sess = s; sGrid = grid;
     $('qrx-out').hidden = false; $('p').classList.add('playing'); $('qrx-edit').hidden = false; $('qrx-edit').textContent = '换内容';
     player.load(sess, QR.rgb, grid);
@@ -3685,7 +3688,7 @@ if(n+2>=i)return e;if(t=255&e[++n],128!=(192&t))return e;if(o=255&e[++n],128!=(1
     player.play();
   }
 
-  if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('打开 QRStream 发送面板 (Alt+Q)', openPanel);
+  if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('打开 QRStream 发送面板 · Alt+Q', openPanel);
   window.addEventListener('keydown', e => { if (e.altKey && (e.key === 'q' || e.key === 'Q' || e.code === 'KeyQ')) { e.preventDefault(); openPanel(); } });
 })();
 /* jshint ignore:end */
